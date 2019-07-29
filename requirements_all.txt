@@ -86,9 +86,6 @@ PyXiaomiGateway==0.12.4
 # homeassistant.components.rpi_gpio
 # RPi.GPIO==0.7.0
 
-# homeassistant.components.pcf8574
-# pcf8574==0.0.5
-
 # homeassistant.components.remember_the_milk
 RtmAPI==0.7.2
 
@@ -977,6 +974,9 @@ panasonic_viera==0.3.2
 
 # homeassistant.components.pcal9535a
 pcal9535a==0.7
+
+# homeassistant.components.pcf8574
+pcf8574==0.0.5
 
 # homeassistant.components.dunehd
 pdunehd==1.3
