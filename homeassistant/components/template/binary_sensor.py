@@ -140,6 +140,7 @@ class BinarySensorTemplate(BinarySensorDevice):
         self._availability_template = availability_template
         self._entity_picture_template = entity_picture_template
         self._icon = None
+        self._icon_color = None
         self._entity_picture = None
         self._entities = entity_ids
         self._delay_on = delay_on
@@ -180,6 +181,11 @@ class BinarySensorTemplate(BinarySensorDevice):
     def icon(self):
         """Return the icon to use in the frontend, if any."""
         return self._icon
+
+    @property
+    def icon_color(self):
+        """Return the icon to use in the frontend, if any."""
+        return self._icon_color
 
     @property
     def entity_picture(self):
