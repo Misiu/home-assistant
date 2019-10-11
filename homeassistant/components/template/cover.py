@@ -202,6 +202,7 @@ class CoverTemplate(CoverDevice):
         self._position_template = position_template
         self._tilt_template = tilt_template
         self._icon_template = icon_template
+        self._icon_color_template = icon_color_template
         self._device_class = device_class
         self._entity_picture_template = entity_picture_template
         self._availability_template = availability_template
@@ -223,6 +224,7 @@ class CoverTemplate(CoverDevice):
         self._optimistic = optimistic or (not state_template and not position_template)
         self._tilt_optimistic = tilt_optimistic or not tilt_template
         self._icon = None
+        self._icon_color = None
         self._entity_picture = None
         self._position = None
         self._tilt_value = None
@@ -282,6 +284,11 @@ class CoverTemplate(CoverDevice):
     def icon(self):
         """Return the icon to use in the frontend, if any."""
         return self._icon
+
+    @property
+    def icon_color(self):
+        """Return the icon color to use in the frontend, if any."""
+        return self._icon_color
 
     @property
     def entity_picture(self):

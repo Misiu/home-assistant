@@ -184,7 +184,7 @@ class BinarySensorTemplate(BinarySensorDevice):
 
     @property
     def icon_color(self):
-        """Return the icon to use in the frontend, if any."""
+        """Return the icon color to use in the frontend, if any."""
         return self._icon_color
 
     @property
@@ -234,6 +234,7 @@ class BinarySensorTemplate(BinarySensorDevice):
                 return
             _LOGGER.error("Could not render template %s: %s", self._name, ex)
 
+
         attrs = {}
         if self._attribute_templates is not None:
             for key, value in self._attribute_templates.items():
@@ -250,6 +251,7 @@ class BinarySensorTemplate(BinarySensorDevice):
         }
 
         for property_name, template in templates.items():
+
             if template is None:
                 continue
 
