@@ -1,0 +1,9 @@
+{
+  "domain": "pcf8574",
+  "name": "PCF8574 I/O Expander",
+  "config_flow": false,
+  "documentation": "https://www.home-assistant.io/integrations/pcf8574",
+  "requirements": ["i2crelay==0.1.0"],
+  "dependencies": [],
+  "codeowners": ["@Misiu"]
+}

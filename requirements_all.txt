@@ -703,6 +703,9 @@ huawei-lte-api==1.4.7
 # homeassistant.components.hydrawise
 hydrawiser==0.1.1
 
+# homeassistant.components.pcf8574
+i2crelay==0.1.0
+
 # homeassistant.components.bh1750
 # homeassistant.components.bme280
 # homeassistant.components.htu21d
