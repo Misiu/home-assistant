@@ -3,7 +3,7 @@
 # https://github.com/flyte/pcf8574
 import logging
 
-from pcf8574 import PCF8574
+from pcf8574 import PCF8574  # pylint: disable=import-error
 import voluptuous as vol
 
 from homeassistant.components.switch import PLATFORM_SCHEMA, SwitchDevice

@@ -349,6 +349,9 @@ oauth2client==4.0.0
 # homeassistant.components.shiftr
 paho-mqtt==1.5.0
 
+# homeassistant.components.pcf8574
+pcf8574==0.0.5
+
 # homeassistant.components.aruba
 # homeassistant.components.cisco_ios
 # homeassistant.components.pandora

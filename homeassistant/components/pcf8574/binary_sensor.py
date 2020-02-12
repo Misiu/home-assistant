@@ -1,7 +1,7 @@
 """Support for binary sensor using I2C PCF8574 chip."""
 import logging
 
-from pcf8574 import PCF8574
+from pcf8574 import PCF8574  # pylint: disable=import-error
 import voluptuous as vol
 
 from homeassistant.components.binary_sensor import PLATFORM_SCHEMA, BinarySensorDevice
