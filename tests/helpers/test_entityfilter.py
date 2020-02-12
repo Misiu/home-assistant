@@ -5,10 +5,14 @@ from homeassistant.helpers.entityfilter import FILTER_SCHEMA, generate_filter
 def test_no_filters_case_1():
     """If include and exclude not included, pass everything."""
     incl_dom = {}
+    incl_pla = {}
     incl_ent = {}
     excl_dom = {}
+    excl_pla = {}
     excl_ent = {}
-    testfilter = generate_filter(incl_dom, incl_ent, excl_dom, excl_ent)
+    testfilter = generate_filter(
+        incl_dom, incl_pla, incl_ent, excl_dom, excl_pla, excl_ent
+    )
 
     for value in ("sensor.test", "sun.sun", "light.test"):
         assert testfilter(value)
@@ -17,10 +21,14 @@ def test_no_filters_case_1():
 def test_includes_only_case_2():
     """If include specified, only pass if specified (Case 2)."""
     incl_dom = {"light", "sensor"}
+    incl_pla = {}
     incl_ent = {"binary_sensor.working"}
     excl_dom = {}
+    excl_pla = {}
     excl_ent = {}
-    testfilter = generate_filter(incl_dom, incl_ent, excl_dom, excl_ent)
+    testfilter = generate_filter(
+        incl_dom, incl_pla, incl_ent, excl_dom, excl_pla, excl_ent
+    )
 
     assert testfilter("sensor.test")
     assert testfilter("light.test")
@@ -32,10 +40,14 @@ def test_includes_only_case_2():
 def test_excludes_only_case_3():
     """If exclude specified, pass all but specified (Case 3)."""
     incl_dom = {}
+    incl_pla = {}
     incl_ent = {}
     excl_dom = {"light", "sensor"}
+    excl_pla = {}
     excl_ent = {"binary_sensor.working"}
-    testfilter = generate_filter(incl_dom, incl_ent, excl_dom, excl_ent)
+    testfilter = generate_filter(
+        incl_dom, incl_pla, incl_ent, excl_dom, excl_pla, excl_ent
+    )
 
     assert testfilter("sensor.test") is False
     assert testfilter("light.test") is False
@@ -47,10 +59,14 @@ def test_excludes_only_case_3():
 def test_with_include_domain_case4a():
     """Test case 4a - include and exclude specified, with included domain."""
     incl_dom = {"light", "sensor"}
+    incl_pla = {}
     incl_ent = {"binary_sensor.working"}
     excl_dom = {}
+    excl_pla = {}
     excl_ent = {"light.ignoreme", "sensor.notworking"}
-    testfilter = generate_filter(incl_dom, incl_ent, excl_dom, excl_ent)
+    testfilter = generate_filter(
+        incl_dom, incl_pla, incl_ent, excl_dom, excl_pla, excl_ent
+    )
 
     assert testfilter("sensor.test")
     assert testfilter("sensor.notworking") is False
@@ -64,10 +80,14 @@ def test_with_include_domain_case4a():
 def test_exclude_domain_case4b():
     """Test case 4b - include and exclude specified, with excluded domain."""
     incl_dom = {}
+    incl_pla = {}
     incl_ent = {"binary_sensor.working"}
     excl_dom = {"binary_sensor"}
+    excl_pla = {}
     excl_ent = {"light.ignoreme", "sensor.notworking"}
-    testfilter = generate_filter(incl_dom, incl_ent, excl_dom, excl_ent)
+    testfilter = generate_filter(
+        incl_dom, incl_pla, incl_ent, excl_dom, excl_pla, excl_ent
+    )
 
     assert testfilter("sensor.test")
     assert testfilter("sensor.notworking") is False
@@ -81,10 +101,14 @@ def test_exclude_domain_case4b():
 def test_no_domain_case4c():
     """Test case 4c - include and exclude specified, with no domains."""
     incl_dom = {}
+    incl_pla = {}
     incl_ent = {"binary_sensor.working"}
     excl_dom = {}
+    excl_pla = {}
     excl_ent = {"light.ignoreme", "sensor.notworking"}
-    testfilter = generate_filter(incl_dom, incl_ent, excl_dom, excl_ent)
+    testfilter = generate_filter(
+        incl_dom, incl_pla, incl_ent, excl_dom, excl_pla, excl_ent
+    )
 
     assert testfilter("sensor.test") is False
     assert testfilter("sensor.notworking") is False
@@ -99,8 +123,10 @@ def test_filter_schema():
     """Test filter schema."""
     conf = {
         "include_domains": ["light"],
+        "include_platforms": ["filesize"],
         "include_entities": ["switch.kitchen"],
         "exclude_domains": ["cover"],
+        "exclude_platforms": ["time_date"],
         "exclude_entities": ["light.kitchen"],
     }
     filt = FILTER_SCHEMA(conf)

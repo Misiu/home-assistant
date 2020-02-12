@@ -106,6 +106,11 @@ TIMEOUT_EVENT_START = 15
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_platform(entity_id: str) -> str:
+    """Get platform for entity_id"""
+    return "the best way"
+    
+
 def split_entity_id(entity_id: str) -> List[str]:
     """Split a state entity_id into domain, object_id."""
     return entity_id.split(".", 1)

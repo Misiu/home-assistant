@@ -44,6 +44,7 @@ _LOGGER = logging.getLogger(__name__)
 ATTR_MESSAGE = "message"
 
 CONF_DOMAINS = "domains"
+CONF_PLATFORMS = "platforms"
 CONF_ENTITIES = "entities"
 CONTINUOUS_DOMAINS = ["proximity", "sensor"]
 
@@ -58,6 +59,9 @@ CONFIG_SCHEMA = vol.Schema(
                 CONF_EXCLUDE: vol.Schema(
                     {
                         vol.Optional(CONF_ENTITIES, default=[]): cv.entity_ids,
+                        vol.Optional(CONF_PLATFORMS, default=[]): vol.All(
+                            cv.ensure_list, [cv.string]
+                        ),
                         vol.Optional(CONF_DOMAINS, default=[]): vol.All(
                             cv.ensure_list, [cv.string]
                         ),
@@ -66,6 +70,9 @@ CONFIG_SCHEMA = vol.Schema(
                 CONF_INCLUDE: vol.Schema(
                     {
                         vol.Optional(CONF_ENTITIES, default=[]): cv.entity_ids,
+                        vol.Optional(CONF_PLATFORMS, default=[]): vol.All(
+                            cv.ensure_list, [cv.string]
+                        ),
                         vol.Optional(CONF_DOMAINS, default=[]): vol.All(
                             cv.ensure_list, [cv.string]
                         ),
@@ -367,21 +374,30 @@ def _get_related_entity_ids(session, entity_filter):
 
 def _generate_filter_from_config(config):
     excluded_entities = []
+    excluded_platforms = []
     excluded_domains = []
     included_entities = []
+    included_platforms = []
     included_domains = []
 
     exclude = config.get(CONF_EXCLUDE)
     if exclude:
         excluded_entities = exclude.get(CONF_ENTITIES, [])
+        excluded_platforms = exclude.get(CONF_PLATFORMS, [])
         excluded_domains = exclude.get(CONF_DOMAINS, [])
     include = config.get(CONF_INCLUDE)
     if include:
         included_entities = include.get(CONF_ENTITIES, [])
+        included_platforms = include.get(CONF_PLATFORMS, [])
         included_domains = include.get(CONF_DOMAINS, [])
 
     return generate_filter(
-        included_domains, included_entities, excluded_domains, excluded_entities
+        included_domains,
+        included_platforms,
+        included_entities,
+        excluded_domains,
+        excluded_platforms,
+        excluded_entities,
     )
 
 

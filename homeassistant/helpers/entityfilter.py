@@ -3,20 +3,24 @@ from typing import Callable, Dict, List
 
 import voluptuous as vol
 
-from homeassistant.core import split_entity_id
+from homeassistant.core import get_platform, split_entity_id
 from homeassistant.helpers import config_validation as cv
 
 CONF_INCLUDE_DOMAINS = "include_domains"
+CONF_INCLUDE_PLATFORMS = "include_platforms"
 CONF_INCLUDE_ENTITIES = "include_entities"
 CONF_EXCLUDE_DOMAINS = "exclude_domains"
+CONF_EXCLUDE_PLATFORMS = "exclude_platforms"
 CONF_EXCLUDE_ENTITIES = "exclude_entities"
 
 
 def _convert_filter(config: Dict[str, List[str]]) -> Callable[[str], bool]:
     filt = generate_filter(
         config[CONF_INCLUDE_DOMAINS],
+        config[CONF_INCLUDE_PLATFORMS],
         config[CONF_INCLUDE_ENTITIES],
         config[CONF_EXCLUDE_DOMAINS],
+        config[CONF_EXCLUDE_PLATFORMS],
         config[CONF_EXCLUDE_ENTITIES],
     )
     setattr(filt, "config", config)
@@ -30,8 +34,14 @@ FILTER_SCHEMA = vol.All(
             vol.Optional(CONF_EXCLUDE_DOMAINS, default=[]): vol.All(
                 cv.ensure_list, [cv.string]
             ),
+            vol.Optional(CONF_EXCLUDE_PLATFORMS, default=[]): vol.All(
+                cv.ensure_list, [cv.string]
+            ),
             vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): cv.entity_ids,
             vol.Optional(CONF_INCLUDE_DOMAINS, default=[]): vol.All(
+                cv.ensure_list, [cv.string]
+            ),
+            vol.Optional(CONF_INCLUDE_PLATFORMS, default=[]): vol.All(
                 cv.ensure_list, [cv.string]
             ),
             vol.Optional(CONF_INCLUDE_ENTITIES, default=[]): cv.entity_ids,
@@ -43,18 +53,22 @@ FILTER_SCHEMA = vol.All(
 
 def generate_filter(
     include_domains: List[str],
+    include_platforms: List[str],
     include_entities: List[str],
     exclude_domains: List[str],
+    exclude_platforms: List[str],
     exclude_entities: List[str],
 ) -> Callable[[str], bool]:
     """Return a function that will filter entities based on the args."""
     include_d = set(include_domains)
+    include_p = set(include_platforms)
     include_e = set(include_entities)
     exclude_d = set(exclude_domains)
+    exclude_p = set(exclude_platforms)
     exclude_e = set(exclude_entities)
 
-    have_exclude = bool(exclude_e or exclude_d)
-    have_include = bool(include_e or include_d)
+    have_exclude = bool(exclude_e or exclude_p or exclude_d)
+    have_include = bool(include_e or include_p or include_d)
 
     # Case 1 - no includes or excludes - pass all entities
     if not have_include and not have_exclude:
@@ -66,7 +80,8 @@ def generate_filter(
         def entity_filter_2(entity_id: str) -> bool:
             """Return filter function for case 2."""
             domain = split_entity_id(entity_id)[0]
-            return entity_id in include_e or domain in include_d
+            platform = get_platform(entity_id)
+            return entity_id in include_e or platform in include_p or domain in include_d
 
         return entity_filter_2
 
@@ -76,7 +91,8 @@ def generate_filter(
         def entity_filter_3(entity_id: str) -> bool:
             """Return filter function for case 3."""
             domain = split_entity_id(entity_id)[0]
-            return entity_id not in exclude_e and domain not in exclude_d
+            platform = get_platform(entity_id)
+            return entity_id not in exclude_e and platform not in exclude_p and domain not in exclude_d
 
         return entity_filter_3
 
@@ -86,6 +102,8 @@ def generate_filter(
     #  - if domain is not included, pass if entity is included
     # note: if both include and exclude domains specified,
     #   the exclude domains are ignored
+
+    # missing cases for platforms!!!
     if include_d:
 
         def entity_filter_4a(entity_id: str) -> bool:

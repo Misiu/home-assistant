@@ -23,6 +23,7 @@ from homeassistant.const import (
     CONF_ENTITIES,
     CONF_EXCLUDE,
     CONF_INCLUDE,
+    CONF_PLATFORMS,
     EVENT_HOMEASSISTANT_START,
     EVENT_HOMEASSISTANT_STOP,
     EVENT_STATE_CHANGED,
@@ -76,6 +77,7 @@ FILTER_SCHEMA = vol.Schema(
         vol.Optional(CONF_EXCLUDE, default={}): vol.Schema(
             {
                 vol.Optional(CONF_DOMAINS): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(CONF_PLATFORMS): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_ENTITIES): cv.entity_ids,
                 vol.Optional(CONF_EVENT_TYPES): vol.All(cv.ensure_list, [cv.string]),
             }
@@ -83,6 +85,7 @@ FILTER_SCHEMA = vol.Schema(
         vol.Optional(CONF_INCLUDE, default={}): vol.Schema(
             {
                 vol.Optional(CONF_DOMAINS): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(CONF_PLATFORMS): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_ENTITIES): cv.entity_ids,
             }
         ),
@@ -221,8 +224,10 @@ class Recorder(threading.Thread):
 
         self.entity_filter = generate_filter(
             include.get(CONF_DOMAINS, []),
+            include.get(CONF_PLATFORMS, []),
             include.get(CONF_ENTITIES, []),
             exclude.get(CONF_DOMAINS, []),
+            exclude.GET(CONF_PLATFORMS, []),
             exclude.get(CONF_ENTITIES, []),
         )
         self.exclude_t = exclude.get(CONF_EVENT_TYPES, [])
