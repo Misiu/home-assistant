@@ -164,6 +164,11 @@ def _setup_sensor(hass, temp):
     hass.states.async_set(ENT_SENSOR, temp)
 
 
+def _send_time_changed(hass, newtime):
+    """Send a time changed event."""
+    hass.bus.async_fire(ha.EVENT_TIME_CHANGED, {ha.ATTR_NOW: newtime})
+
+
 @pytest.fixture
 async def setup_comp_2(hass):
     """Initialize components."""
@@ -1295,3 +1300,71 @@ async def test_reload(hass):
 
 def _get_fixtures_base_path():
     return path.dirname(path.dirname(path.dirname(__file__)))
+
+
+@pytest.fixture
+async def setup_comp_10(hass):
+    """Initialize components."""
+    hass.config.temperature_unit = TEMP_CELSIUS
+    assert await async_setup_component(
+        hass,
+        DOMAIN,
+        {
+            "climate": {
+                "platform": "generic_thermostat",
+                "name": "test",
+                "heater": ENT_SWITCH,
+                "target_sensor": ENT_SENSOR,
+                "target_temp": 17,
+                "sensor_stale_duration": {"minutes": 10},
+            }
+        },
+    )
+    await hass.async_block_till_done()
+
+
+async def test_sensor_stale_duration(hass, setup_comp_1, caplog):
+    """Test the setting of sensor slate duration."""
+
+    heater_switch = "input_boolean.test"
+    assert await async_setup_component(
+        hass, input_boolean.DOMAIN, {"input_boolean": {"test": None}}
+    )
+
+    start_time = datetime.datetime.now(pytz.UTC)
+
+    assert await async_setup_component(
+        hass,
+        DOMAIN,
+        {
+            "climate": {
+                "platform": "generic_thermostat",
+                "name": "test",
+                "heater": heater_switch,
+                "target_sensor": ENT_SENSOR,
+                "initial_hvac_mode": HVAC_MODE_HEAT,
+                "sensor_stale_duration": {"minutes": 10},
+            }
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert STATE_OFF == hass.states.get(heater_switch).state
+
+    _setup_sensor(hass, 18)
+    await hass.async_block_till_done()
+    await common.async_set_temperature(hass, 23)
+
+    assert STATE_ON == hass.states.get(heater_switch).state
+
+    # wait 11 minutes
+    _send_time_changed(hass, start_time + datetime.timedelta(minutes=20))
+    await hass.async_block_till_done()
+
+    assert STATE_OFF == hass.states.get(heater_switch).state
+
+    hass.states.async_set(ENT_SENSOR, STATE_UNKNOWN)
+    # _setup_sensor(hass, None)
+    # await hass.async_block_till_done()
+
+    assert STATE_OFF == hass.states.get(heater_switch).state

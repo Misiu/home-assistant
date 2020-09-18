@@ -63,6 +63,7 @@ CONF_KEEP_ALIVE = "keep_alive"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
+CONF_STALE_DURATION = "sensor_stale_duration"
 SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
@@ -85,6 +86,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_PRECISION): vol.In(
             [PRECISION_TENTHS, PRECISION_HALVES, PRECISION_WHOLE]
         ),
+        vol.Optional(CONF_STALE_DURATION): cv.positive_time_period,
     }
 )
 
@@ -109,6 +111,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     away_temp = config.get(CONF_AWAY_TEMP)
     precision = config.get(CONF_PRECISION)
     unit = hass.config.units.temperature_unit
+    sensor_stale_duration = config.get(CONF_STALE_DURATION)
 
     async_add_entities(
         [
@@ -128,6 +131,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
                 away_temp,
                 precision,
                 unit,
+                sensor_stale_duration,
             )
         ]
     )
@@ -153,6 +157,7 @@ class GenericThermostat(ClimateEntity, RestoreEntity):
         away_temp,
         precision,
         unit,
+        sensor_stale_duration,
     ):
         """Initialize the thermostat."""
         self._name = name
@@ -182,6 +187,8 @@ class GenericThermostat(ClimateEntity, RestoreEntity):
             self._support_flags = SUPPORT_FLAGS | SUPPORT_PRESET_MODE
         self._away_temp = away_temp
         self._is_away = False
+        self._sensor_stale_duration = sensor_stale_duration
+        self._emergency_stop = False
 
     async def async_added_to_hass(self):
         """Run when entity about to be added."""
@@ -198,6 +205,13 @@ class GenericThermostat(ClimateEntity, RestoreEntity):
                 self.hass, [self.heater_entity_id], self._async_switch_changed
             )
         )
+
+        if self._sensor_stale_duration:
+            async_track_time_interval(
+                self.hass,
+                self._async_check_sensor_not_responding,
+                self._sensor_stale_duration,
+            )
 
         if self._keep_alive:
             self.async_on_remove(
@@ -369,12 +383,34 @@ class GenericThermostat(ClimateEntity, RestoreEntity):
     async def _async_sensor_changed(self, event):
         """Handle temperature changes."""
         new_state = event.data.get("new_state")
+        _LOGGER.debug("New state: %s", new_state)
+        _LOGGER.debug("New state.state: %s", new_state.state)
+
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            await self._activate_emergency_stop()
             return
 
+        self._emergency_stop = False
         self._async_update_temp(new_state)
         await self._async_control_heating()
         self.async_write_ha_state()
+
+    async def _async_check_sensor_not_responding(self, now=None):
+        """Check if the sensor has emitted a value during the allowed stale period."""
+
+        sensor_state = self.hass.states.get(self.sensor_entity_id)
+
+        if sensor_state.last_updated < now - self._sensor_stale_duration:
+            _LOGGER.debug(
+                "Time is %s, last changed is %s, stale duration is %s",
+                now,
+                sensor_state.last_updated,
+                self._sensor_stale_duration,
+            )
+            _LOGGER.debug("Sensor is stalled, call the emergency stop")
+            await self._activate_emergency_stop()
+
+        return
 
     @callback
     def _async_switch_changed(self, event):
@@ -394,6 +430,7 @@ class GenericThermostat(ClimateEntity, RestoreEntity):
 
     async def _async_control_heating(self, time=None, force=False):
         """Check if we need to turn heating on or off."""
+        _LOGGER.info("_emergency_stop: %s", self._emergency_stop)
         async with self._temp_lock:
             if not self._active and None not in (self._cur_temp, self._target_temp):
                 self._active = True
@@ -487,3 +524,9 @@ class GenericThermostat(ClimateEntity, RestoreEntity):
             await self._async_control_heating(force=True)
 
         self.async_write_ha_state()
+
+    async def _activate_emergency_stop(self):
+        """Send an emergency OFF order to HVAC devices."""
+        _LOGGER.debug("Emergency OFF order send to devices")
+        self._emergency_stop = True
+        await self._async_heater_turn_off()
