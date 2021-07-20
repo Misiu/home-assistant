@@ -1,0 +1,17 @@
+{
+  "domain": "argon40",
+  "name": "Argon40",
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/argon40",
+  "requirements": [
+    "smbus-cffi==0.5.1"
+  ],
+  "ssdp": [],
+  "zeroconf": [],
+  "homekit": {},
+  "dependencies": [],
+  "codeowners": [
+    "@Misiu"
+  ],
+  "iot_class": "assumed_state"
+}

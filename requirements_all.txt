@@ -2120,6 +2120,7 @@ smart-meter-texas==0.4.0
 # homeassistant.components.smarthab
 smarthab==0.21
 
+# homeassistant.components.argon40
 # homeassistant.components.bh1750
 # homeassistant.components.bme280
 # homeassistant.components.bme680

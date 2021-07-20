@@ -23,6 +23,7 @@ FLOWS = [
     "ambient_station",
     "apple_tv",
     "arcam_fmj",
+    "argon40",
     "asuswrt",
     "atag",
     "august",

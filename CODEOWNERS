@@ -46,6 +46,7 @@ homeassistant/components/aprs/* @PhilRW
 homeassistant/components/arcam_fmj/* @elupus
 homeassistant/components/arduino/* @fabaff
 homeassistant/components/arest/* @fabaff
+homeassistant/components/argon40/* @Misiu
 homeassistant/components/arris_tg2492lg/* @vanbalken
 homeassistant/components/asuswrt/* @kennedyshead @ollo69
 homeassistant/components/atag/* @MatsNL

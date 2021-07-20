@@ -1160,6 +1160,15 @@ smart-meter-texas==0.4.0
 # homeassistant.components.smarthab
 smarthab==0.21
 
+# homeassistant.components.argon40
+# homeassistant.components.bh1750
+# homeassistant.components.bme280
+# homeassistant.components.bme680
+# homeassistant.components.envirophat
+# homeassistant.components.htu21d
+# homeassistant.components.raspihats
+# smbus-cffi==0.5.1
+
 # homeassistant.components.smhi
 smhi-pkg==1.0.15
 
