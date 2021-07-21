@@ -14,6 +14,7 @@ from homeassistant.const import (
     ATTR_NAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -28,18 +29,24 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Argon40 fan platform."""
-    devices = []
-    devices.append(Argon40FanEntity())
-    async_add_entities(devices)
+
+    bus = None
+    try:
+        bus = SMBus(1)
+    except OSError as err:
+        _LOGGER.error("I2C error: %s", err)
+        raise PlatformNotReady from err
+
+    async_add_entities([Argon40FanEntity(bus)])
 
 
 class Argon40FanEntity(FanEntity):
     """Representation of an Argon40 fan."""
 
-    def __init__(self) -> None:
+    def __init__(self, bus: SMBus) -> None:
         """Initialize the fan."""
         self._percentage = 0
-        self._bus = SMBus(1)
+        self._bus = bus
 
     @property
     def unique_id(self) -> str:
@@ -57,10 +64,16 @@ class Argon40FanEntity(FanEntity):
         return False
 
     @property
+    def icon(self) -> str:
+        """Return the icon of device based on its type."""
+        return "mdi:raspberry-pi"
+
+    @property
     def supported_features(self) -> int:
         """Flag supported features."""
         return SUPPORT_SET_SPEED
 
+    # I think the default is 100, so this isn't needed
     @property
     def speed_count(self) -> int:
         """Return the number of speeds the fan supports."""
@@ -96,7 +109,7 @@ class Argon40FanEntity(FanEntity):
         percentage = max(0, percentage)
         percentage = min(100, percentage)
         self._percentage = percentage
-        # write percentage to smbus
+
         self._bus.write_byte(I2C_ADDRESS, int(percentage))
 
         self.async_schedule_update_ha_state()

@@ -20,7 +20,6 @@ IGNORED_MODULES: Final[list[str]] = [
     "homeassistant.components.almond.*",
     "homeassistant.components.amcrest.*",
     "homeassistant.components.analytics.*",
-    "homeassistant.components.argon40.*",
     "homeassistant.components.asuswrt.*",
     "homeassistant.components.atag.*",
     "homeassistant.components.awair.*",
