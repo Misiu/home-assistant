@@ -3,13 +3,21 @@ from __future__ import annotations
 
 import logging
 
+from smbus import SMBus
+
 from homeassistant.components.fan import SUPPORT_SET_SPEED, FanEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    ATTR_IDENTIFIERS,
+    ATTR_MANUFACTURER,
+    ATTR_MODEL,
+    ATTR_NAME,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DEFAULT_ON_PERCENTAGE, DOMAIN
+from .const import DEFAULT_ON_PERCENTAGE, DOMAIN, I2C_ADDRESS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,16 +39,7 @@ class Argon40FanEntity(FanEntity):
     def __init__(self) -> None:
         """Initialize the fan."""
         self._percentage = 0
-
-    @property
-    def name(self) -> str:
-        """Return the name of the fan."""
-        return "Argon40 Case"
-
-    @property
-    def supported_features(self) -> int:
-        """Flag supported features."""
-        return SUPPORT_SET_SPEED
+        self._bus = SMBus(1)
 
     @property
     def unique_id(self) -> str:
@@ -48,9 +47,44 @@ class Argon40FanEntity(FanEntity):
         return "argon40_case"
 
     @property
+    def name(self) -> str:
+        """Return the name of the fan."""
+        return "Argon40 Case"
+
+    @property
+    def should_poll(self) -> bool:
+        """No polling needed for a fan."""
+        return False
+
+    @property
+    def supported_features(self) -> int:
+        """Flag supported features."""
+        return SUPPORT_SET_SPEED
+
+    @property
+    def speed_count(self) -> int:
+        """Return the number of speeds the fan supports."""
+        return 100
+
+    @property
     def percentage(self) -> int | None:
         """Return the current speed percentage."""
         return self._percentage
+
+    @property
+    def is_on(self) -> bool:
+        """Get if the fan is on."""
+        return self._percentage != 0
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device specific attributes."""
+        return {
+            ATTR_IDENTIFIERS: {(DOMAIN, "Case")},
+            ATTR_NAME: "Argon ONE Case for Raspberry Pi 4",
+            ATTR_MANUFACTURER: "Argon40",
+            ATTR_MODEL: "V2",
+        }
 
     def set_percentage(self, percentage: int):
         """Set the speed percentage."""
@@ -62,27 +96,10 @@ class Argon40FanEntity(FanEntity):
         percentage = max(0, percentage)
         percentage = min(100, percentage)
         self._percentage = percentage
+        # write percentage to smbus
+        self._bus.write_byte(I2C_ADDRESS, int(percentage))
+
         self.async_schedule_update_ha_state()
-
-    @property
-    def speed_count(self) -> int:
-        """Return the number of speeds the fan supports."""
-        return 100
-
-    @property
-    def is_on(self) -> bool:
-        """Get if the fan is on."""
-        return self._percentage != 0
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device specific attributes."""
-        return {
-            "identifiers": {(DOMAIN, "Case")},
-            "name": "Argon ONE Case for Raspberry Pi 4",
-            "manufacturer": "Argon40",
-            "model": "V2",
-        }
 
     def turn_on(
         self,
