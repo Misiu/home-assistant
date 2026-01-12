@@ -155,54 +155,22 @@ def test_contains_point_on_boundary() -> None:
     assert geometry.contains_point(identifier, geojson, 0.0, 0.0)
 
 
-def test_points_to_geojson_polygon() -> None:
-    """Test converting points to GeoJSON polygon."""
-    # Input points are [lat, lon] (HA convention)
-    points = [[48.8566, 2.3522], [48.8576, 2.3522], [48.8576, 2.3532], [48.8566, 2.3532]]
-
-    geojson = geometry.points_to_geojson_polygon(points)
-
-    assert geojson["type"] == "Polygon"
-    # GeoJSON coordinates are [lon, lat]
-    coords = geojson["coordinates"][0]
-    assert coords[0] == [2.3522, 48.8566]  # First point: [lon, lat]
-    assert coords[-1] == coords[0]  # Ring should be closed
-
-
-def test_points_to_geojson_polygon_auto_close() -> None:
-    """Test that polygon ring is automatically closed."""
-    points = [[48.8566, 2.3522], [48.8576, 2.3522], [48.8576, 2.3532]]
-
-    geojson = geometry.points_to_geojson_polygon(points)
-
-    coords = geojson["coordinates"][0]
-    # Should have 4 points (3 + 1 to close)
-    assert len(coords) == 4
-    assert coords[0] == coords[-1]
-
-
-def test_points_to_geojson_polygon_too_few_points() -> None:
-    """Test that too few points raises error."""
-    points = [[48.8566, 2.3522], [48.8576, 2.3522]]
-
-    with pytest.raises(ValueError, match="at least 3 points"):
-        geometry.points_to_geojson_polygon(points)
-
-
 def test_coordinate_order_consistency() -> None:
     """Test that coordinate order is consistent throughout."""
     geometry.clear_all_caches()
 
-    # Create a polygon using points (lat/lon order)
+    # Create a GeoJSON polygon directly with lon/lat order
     # Paris area coordinates
-    points = [
-        [48.8566, 2.3522],  # lat, lon
-        [48.8576, 2.3522],
-        [48.8576, 2.3532],
-        [48.8566, 2.3532],
-    ]
-
-    geojson = geometry.points_to_geojson_polygon(points)
+    geojson = {
+        "type": "Polygon",
+        "coordinates": [[
+            [2.3522, 48.8566],  # lon, lat
+            [2.3522, 48.8576],
+            [2.3532, 48.8576],
+            [2.3532, 48.8566],
+            [2.3522, 48.8566],  # Close the ring
+        ]]
+    }
 
     # Point inside: center of the polygon (lat=48.8571, lon=2.3527)
     identifier = "zone.test"
@@ -213,26 +181,28 @@ def test_coordinate_order_consistency() -> None:
 
 
 def test_real_world_coordinates() -> None:
-    """Test with real-world coordinates similar to PR test case."""
+    """Test with real-world coordinates."""
     geometry.clear_all_caches()
 
-    # From the PR test case
-    points = [
-        [32.882630, -117.240536],
-        [32.882747, -117.236276],
-        [32.879077, -117.235812],
-        [32.880573, -117.241177],
-    ]
-
-    geojson = geometry.points_to_geojson_polygon(points)
+    # Create GeoJSON directly in lon/lat order
+    geojson = {
+        "type": "Polygon",
+        "coordinates": [[
+            [-117.240536, 32.882630],
+            [-117.236276, 32.882747],
+            [-117.235812, 32.879077],
+            [-117.241177, 32.880573],
+            [-117.240536, 32.882630],  # Close the ring
+        ]]
+    }
 
     identifier = "zone.test"
-    # Point that should be inside (from PR test)
+    # Point that should be inside
     latitude = 32.880600
     longitude = -117.237561
     assert geometry.contains_point(identifier, geojson, longitude, latitude)
 
-    # Point that should be outside (from PR test)
+    # Point that should be outside
     latitude_outside = 31.880600
     assert not geometry.contains_point(identifier, geojson, longitude, latitude_outside)
 
@@ -252,80 +222,3 @@ def test_clear_all_caches() -> None:
     geometry.clear_all_caches()
 
     assert len(geometry._GEOMETRY_CACHE) == 0
-
-
-def test_point_to_geojson() -> None:
-    """Test converting a point to GeoJSON."""
-    geojson = geometry.point_to_geojson(48.8566, 2.3522)
-    
-    assert geojson["type"] == "Point"
-    assert geojson["coordinates"] == [2.3522, 48.8566]  # [lon, lat]
-
-
-def test_distance_between_points() -> None:
-    """Test distance calculation between two points."""
-    # Paris to Paris (same point)
-    dist = geometry.distance_between_points(48.8566, 2.3522, 48.8566, 2.3522)
-    assert dist < 1  # Should be essentially 0
-    
-    # Paris to coordinates ~1km away
-    dist = geometry.distance_between_points(48.8566, 2.3522, 48.8566, 2.3622)
-    assert 700 < dist < 900  # Approximately 800 meters
-
-
-def test_create_circle_polygon() -> None:
-    """Test creating a circle approximation as polygon."""
-    geojson = geometry.create_circle_polygon(48.8566, 2.3522, 100, num_points=8)
-    
-    assert geojson["type"] == "Polygon"
-    # Should have 9 points (8 + 1 to close)
-    assert len(geojson["coordinates"][0]) == 9
-    # First and last should be the same (closed ring)
-    assert geojson["coordinates"][0][0] == geojson["coordinates"][0][-1]
-
-
-def test_geometry_contains_geometry() -> None:
-    """Test checking if one geometry contains another."""
-    # Large polygon
-    outer = {
-        "type": "Polygon",
-        "coordinates": [[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]
-    }
-    
-    # Small polygon inside
-    inner = {
-        "type": "Polygon",
-        "coordinates": [[[2.0, 2.0], [4.0, 2.0], [4.0, 4.0], [2.0, 4.0], [2.0, 2.0]]]
-    }
-    
-    # Polygon outside
-    outside = {
-        "type": "Polygon",
-        "coordinates": [[[20.0, 20.0], [25.0, 20.0], [25.0, 25.0], [20.0, 25.0], [20.0, 20.0]]]
-    }
-    
-    assert geometry.geometry_contains_geometry(outer, inner)
-    assert not geometry.geometry_contains_geometry(outer, outside)
-
-
-def test_geometries_intersect() -> None:
-    """Test checking if two geometries intersect."""
-    geom1 = {
-        "type": "Polygon",
-        "coordinates": [[[0.0, 0.0], [5.0, 0.0], [5.0, 5.0], [0.0, 5.0], [0.0, 0.0]]]
-    }
-    
-    # Overlapping polygon
-    geom2 = {
-        "type": "Polygon",
-        "coordinates": [[[3.0, 3.0], [7.0, 3.0], [7.0, 7.0], [3.0, 7.0], [3.0, 3.0]]]
-    }
-    
-    # Non-overlapping polygon
-    geom3 = {
-        "type": "Polygon",
-        "coordinates": [[[10.0, 10.0], [15.0, 10.0], [15.0, 15.0], [10.0, 15.0], [10.0, 10.0]]]
-    }
-    
-    assert geometry.geometries_intersect(geom1, geom2)
-    assert not geometry.geometries_intersect(geom1, geom3)
