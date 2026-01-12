@@ -61,9 +61,9 @@ def test_prepare_and_cache_geometry() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
-    prepared1 = geometry.prepare_and_cache_geometry(zone_id, geojson)
-    prepared2 = geometry.prepare_and_cache_geometry(zone_id, geojson)
+    entity_id = "zone.test"
+    prepared1 = geometry.prepare_and_cache_geometry(entity_id, geojson)
+    prepared2 = geometry.prepare_and_cache_geometry(entity_id, geojson)
 
     # Should return the same cached instance
     assert prepared1 is prepared2
@@ -82,9 +82,9 @@ def test_cache_invalidation_on_geometry_change() -> None:
         "coordinates": [[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
-    prepared1 = geometry.prepare_and_cache_geometry(zone_id, geojson1)
-    prepared2 = geometry.prepare_and_cache_geometry(zone_id, geojson2)
+    entity_id = "zone.test"
+    prepared1 = geometry.prepare_and_cache_geometry(entity_id, geojson1)
+    prepared2 = geometry.prepare_and_cache_geometry(entity_id, geojson2)
 
     # Different geometry should create new prepared geometry
     assert prepared1 is not prepared2
@@ -99,12 +99,12 @@ def test_invalidate_cache() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
-    geometry.prepare_and_cache_geometry(zone_id, geojson)
-    geometry.invalidate_cache(zone_id)
+    entity_id = "zone.test"
+    geometry.prepare_and_cache_geometry(entity_id, geojson)
+    geometry.invalidate_cache(entity_id)
 
     # Cache should be empty for this zone
-    assert not any(key[0] == zone_id for key in geometry._GEOMETRY_CACHE)
+    assert not any(key[0] == entity_id for key in geometry._GEOMETRY_CACHE)
 
 
 def test_contains_point_inside() -> None:
@@ -118,9 +118,9 @@ def test_contains_point_inside() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
+    entity_id = "zone.test"
     # Point at (0.5, 0.5) - center of square
-    assert geometry.contains_point(zone_id, geojson, 0.5, 0.5)
+    assert geometry.contains_point(entity_id, geojson, 0.5, 0.5)
 
 
 def test_contains_point_outside() -> None:
@@ -133,9 +133,9 @@ def test_contains_point_outside() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
+    entity_id = "zone.test"
     # Point at (2.0, 2.0) - outside square
-    assert not geometry.contains_point(zone_id, geojson, 2.0, 2.0)
+    assert not geometry.contains_point(entity_id, geojson, 2.0, 2.0)
 
 
 def test_contains_point_on_boundary() -> None:
@@ -148,11 +148,11 @@ def test_contains_point_on_boundary() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
+    entity_id = "zone.test"
     # Point exactly on the edge
-    assert geometry.contains_point(zone_id, geojson, 0.5, 0.0)
+    assert geometry.contains_point(entity_id, geojson, 0.5, 0.0)
     # Point at corner
-    assert geometry.contains_point(zone_id, geojson, 0.0, 0.0)
+    assert geometry.contains_point(entity_id, geojson, 0.0, 0.0)
 
 
 def test_points_to_geojson_polygon() -> None:
@@ -205,11 +205,11 @@ def test_coordinate_order_consistency() -> None:
     geojson = geometry.points_to_geojson_polygon(points)
 
     # Point inside: center of the polygon (lat=48.8571, lon=2.3527)
-    zone_id = "zone.test"
-    assert geometry.contains_point(zone_id, geojson, 2.3527, 48.8571)  # lon, lat
+    entity_id = "zone.test"
+    assert geometry.contains_point(entity_id, geojson, 2.3527, 48.8571)  # lon, lat
 
     # Point outside
-    assert not geometry.contains_point(zone_id, geojson, 2.36, 48.86)  # lon, lat
+    assert not geometry.contains_point(entity_id, geojson, 2.36, 48.86)  # lon, lat
 
 
 def test_real_world_coordinates() -> None:
@@ -226,15 +226,15 @@ def test_real_world_coordinates() -> None:
 
     geojson = geometry.points_to_geojson_polygon(points)
 
-    zone_id = "zone.test"
+    entity_id = "zone.test"
     # Point that should be inside (from PR test)
     latitude = 32.880600
     longitude = -117.237561
-    assert geometry.contains_point(zone_id, geojson, longitude, latitude)
+    assert geometry.contains_point(entity_id, geojson, longitude, latitude)
 
     # Point that should be outside (from PR test)
     latitude_outside = 31.880600
-    assert not geometry.contains_point(zone_id, geojson, longitude, latitude_outside)
+    assert not geometry.contains_point(entity_id, geojson, longitude, latitude_outside)
 
 
 def test_clear_all_caches() -> None:
@@ -244,11 +244,88 @@ def test_clear_all_caches() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    zone_id = "zone.test"
-    geometry.prepare_and_cache_geometry(zone_id, geojson)
+    entity_id = "zone.test"
+    geometry.prepare_and_cache_geometry(entity_id, geojson)
 
     assert len(geometry._GEOMETRY_CACHE) > 0
 
     geometry.clear_all_caches()
 
     assert len(geometry._GEOMETRY_CACHE) == 0
+
+
+def test_point_to_geojson() -> None:
+    """Test converting a point to GeoJSON."""
+    geojson = geometry.point_to_geojson(48.8566, 2.3522)
+    
+    assert geojson["type"] == "Point"
+    assert geojson["coordinates"] == [2.3522, 48.8566]  # [lon, lat]
+
+
+def test_distance_between_points() -> None:
+    """Test distance calculation between two points."""
+    # Paris to Paris (same point)
+    dist = geometry.distance_between_points(48.8566, 2.3522, 48.8566, 2.3522)
+    assert dist < 1  # Should be essentially 0
+    
+    # Paris to coordinates ~1km away
+    dist = geometry.distance_between_points(48.8566, 2.3522, 48.8566, 2.3622)
+    assert 700 < dist < 900  # Approximately 800 meters
+
+
+def test_create_circle_polygon() -> None:
+    """Test creating a circle approximation as polygon."""
+    geojson = geometry.create_circle_polygon(48.8566, 2.3522, 100, num_points=8)
+    
+    assert geojson["type"] == "Polygon"
+    # Should have 9 points (8 + 1 to close)
+    assert len(geojson["coordinates"][0]) == 9
+    # First and last should be the same (closed ring)
+    assert geojson["coordinates"][0][0] == geojson["coordinates"][0][-1]
+
+
+def test_geometry_contains_geometry() -> None:
+    """Test checking if one geometry contains another."""
+    # Large polygon
+    outer = {
+        "type": "Polygon",
+        "coordinates": [[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]]
+    }
+    
+    # Small polygon inside
+    inner = {
+        "type": "Polygon",
+        "coordinates": [[[2.0, 2.0], [4.0, 2.0], [4.0, 4.0], [2.0, 4.0], [2.0, 2.0]]]
+    }
+    
+    # Polygon outside
+    outside = {
+        "type": "Polygon",
+        "coordinates": [[[20.0, 20.0], [25.0, 20.0], [25.0, 25.0], [20.0, 25.0], [20.0, 20.0]]]
+    }
+    
+    assert geometry.geometry_contains_geometry(outer, inner)
+    assert not geometry.geometry_contains_geometry(outer, outside)
+
+
+def test_geometries_intersect() -> None:
+    """Test checking if two geometries intersect."""
+    geom1 = {
+        "type": "Polygon",
+        "coordinates": [[[0.0, 0.0], [5.0, 0.0], [5.0, 5.0], [0.0, 5.0], [0.0, 0.0]]]
+    }
+    
+    # Overlapping polygon
+    geom2 = {
+        "type": "Polygon",
+        "coordinates": [[[3.0, 3.0], [7.0, 3.0], [7.0, 7.0], [3.0, 7.0], [3.0, 3.0]]]
+    }
+    
+    # Non-overlapping polygon
+    geom3 = {
+        "type": "Polygon",
+        "coordinates": [[[10.0, 10.0], [15.0, 10.0], [15.0, 15.0], [10.0, 15.0], [10.0, 10.0]]]
+    }
+    
+    assert geometry.geometries_intersect(geom1, geom2)
+    assert not geometry.geometries_intersect(geom1, geom3)
