@@ -61,9 +61,9 @@ def test_prepare_and_cache_geometry() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
-    prepared1 = geometry.prepare_and_cache_geometry(entity_id, geojson)
-    prepared2 = geometry.prepare_and_cache_geometry(entity_id, geojson)
+    identifier = "zone.test"
+    prepared1 = geometry.prepare_and_cache_geometry(identifier, geojson)
+    prepared2 = geometry.prepare_and_cache_geometry(identifier, geojson)
 
     # Should return the same cached instance
     assert prepared1 is prepared2
@@ -82,9 +82,9 @@ def test_cache_invalidation_on_geometry_change() -> None:
         "coordinates": [[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
-    prepared1 = geometry.prepare_and_cache_geometry(entity_id, geojson1)
-    prepared2 = geometry.prepare_and_cache_geometry(entity_id, geojson2)
+    identifier = "zone.test"
+    prepared1 = geometry.prepare_and_cache_geometry(identifier, geojson1)
+    prepared2 = geometry.prepare_and_cache_geometry(identifier, geojson2)
 
     # Different geometry should create new prepared geometry
     assert prepared1 is not prepared2
@@ -99,12 +99,12 @@ def test_invalidate_cache() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
-    geometry.prepare_and_cache_geometry(entity_id, geojson)
-    geometry.invalidate_cache(entity_id)
+    identifier = "zone.test"
+    geometry.prepare_and_cache_geometry(identifier, geojson)
+    geometry.invalidate_cache(identifier)
 
     # Cache should be empty for this zone
-    assert not any(key[0] == entity_id for key in geometry._GEOMETRY_CACHE)
+    assert not any(key[0] == identifier for key in geometry._GEOMETRY_CACHE)
 
 
 def test_contains_point_inside() -> None:
@@ -118,9 +118,9 @@ def test_contains_point_inside() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
+    identifier = "zone.test"
     # Point at (0.5, 0.5) - center of square
-    assert geometry.contains_point(entity_id, geojson, 0.5, 0.5)
+    assert geometry.contains_point(identifier, geojson, 0.5, 0.5)
 
 
 def test_contains_point_outside() -> None:
@@ -133,9 +133,9 @@ def test_contains_point_outside() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
+    identifier = "zone.test"
     # Point at (2.0, 2.0) - outside square
-    assert not geometry.contains_point(entity_id, geojson, 2.0, 2.0)
+    assert not geometry.contains_point(identifier, geojson, 2.0, 2.0)
 
 
 def test_contains_point_on_boundary() -> None:
@@ -148,11 +148,11 @@ def test_contains_point_on_boundary() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
+    identifier = "zone.test"
     # Point exactly on the edge
-    assert geometry.contains_point(entity_id, geojson, 0.5, 0.0)
+    assert geometry.contains_point(identifier, geojson, 0.5, 0.0)
     # Point at corner
-    assert geometry.contains_point(entity_id, geojson, 0.0, 0.0)
+    assert geometry.contains_point(identifier, geojson, 0.0, 0.0)
 
 
 def test_points_to_geojson_polygon() -> None:
@@ -205,11 +205,11 @@ def test_coordinate_order_consistency() -> None:
     geojson = geometry.points_to_geojson_polygon(points)
 
     # Point inside: center of the polygon (lat=48.8571, lon=2.3527)
-    entity_id = "zone.test"
-    assert geometry.contains_point(entity_id, geojson, 2.3527, 48.8571)  # lon, lat
+    identifier = "zone.test"
+    assert geometry.contains_point(identifier, geojson, 2.3527, 48.8571)  # lon, lat
 
     # Point outside
-    assert not geometry.contains_point(entity_id, geojson, 2.36, 48.86)  # lon, lat
+    assert not geometry.contains_point(identifier, geojson, 2.36, 48.86)  # lon, lat
 
 
 def test_real_world_coordinates() -> None:
@@ -226,15 +226,15 @@ def test_real_world_coordinates() -> None:
 
     geojson = geometry.points_to_geojson_polygon(points)
 
-    entity_id = "zone.test"
+    identifier = "zone.test"
     # Point that should be inside (from PR test)
     latitude = 32.880600
     longitude = -117.237561
-    assert geometry.contains_point(entity_id, geojson, longitude, latitude)
+    assert geometry.contains_point(identifier, geojson, longitude, latitude)
 
     # Point that should be outside (from PR test)
     latitude_outside = 31.880600
-    assert not geometry.contains_point(entity_id, geojson, longitude, latitude_outside)
+    assert not geometry.contains_point(identifier, geojson, longitude, latitude_outside)
 
 
 def test_clear_all_caches() -> None:
@@ -244,8 +244,8 @@ def test_clear_all_caches() -> None:
         "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]],
     }
 
-    entity_id = "zone.test"
-    geometry.prepare_and_cache_geometry(entity_id, geojson)
+    identifier = "zone.test"
+    geometry.prepare_and_cache_geometry(identifier, geojson)
 
     assert len(geometry._GEOMETRY_CACHE) > 0
 

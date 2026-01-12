@@ -31,7 +31,7 @@ from shapely.geometry.base import BaseGeometry
 
 
 # Cache for geometries (prepared in-place via shapely.prepare())
-# Key: (entity_id, geometry_hash)
+# Key: (identifier, geometry_hash)
 # Value: BaseGeometry (prepared)
 _GEOMETRY_CACHE: dict[tuple[str, str], BaseGeometry] = {}
 
@@ -72,12 +72,12 @@ def build_geometry_from_geojson(geojson: dict[str, Any]) -> BaseGeometry:
 
 
 def prepare_and_cache_geometry(
-    entity_id: str, geojson: dict[str, Any]
+    identifier: str, geojson: dict[str, Any]
 ) -> BaseGeometry:
     """Build and cache a prepared geometry for efficient containment checks.
 
     Prepared geometries are optimized for repeated spatial predicates like
-    contains() and covers(). The cache is keyed by entity_id and geometry content
+    contains() and covers(). The cache is keyed by identifier and geometry content
     to automatically invalidate when the geometry changes.
 
     In Shapely 2.x, prepare() modifies the geometry in-place for optimization.
@@ -86,14 +86,14 @@ def prepare_and_cache_geometry(
     loop for writes to avoid race conditions.
 
     Args:
-        entity_id: Unique identifier for the entity (e.g., zone.home, device_tracker.phone)
+        identifier: Unique identifier for caching (e.g., zone.home, integration_name, device_id)
         geojson: GeoJSON geometry dictionary
 
     Returns:
         Prepared BaseGeometry for efficient spatial operations
     """
     geom_hash = _hash_geometry(geojson)
-    cache_key = (entity_id, geom_hash)
+    cache_key = (identifier, geom_hash)
 
     # Check if we have a cached prepared geometry
     if cache_key not in _GEOMETRY_CACHE:
@@ -104,39 +104,39 @@ def prepare_and_cache_geometry(
         # Cache it
         _GEOMETRY_CACHE[cache_key] = geom
 
-        # Clean up old cache entries for this entity_id (different geometry)
-        _invalidate_entity_cache(entity_id, exclude_key=cache_key)
+        # Clean up old cache entries for this identifier (different geometry)
+        _invalidate_cache(identifier, exclude_key=cache_key)
 
     return _GEOMETRY_CACHE[cache_key]
 
 
-def _invalidate_entity_cache(entity_id: str, exclude_key: tuple[str, str] | None = None) -> None:
-    """Remove old cached geometries for an entity.
+def _invalidate_cache(identifier: str, exclude_key: tuple[str, str] | None = None) -> None:
+    """Remove old cached geometries for an identifier.
 
     Args:
-        entity_id: Entity identifier to invalidate
+        identifier: Identifier to invalidate
         exclude_key: Cache key to keep (the new geometry)
     """
     keys_to_remove = [
-        key for key in _GEOMETRY_CACHE if key[0] == entity_id and key != exclude_key
+        key for key in _GEOMETRY_CACHE if key[0] == identifier and key != exclude_key
     ]
     for key in keys_to_remove:
         del _GEOMETRY_CACHE[key]
 
 
-def invalidate_cache(entity_id: str) -> None:
-    """Invalidate all cached geometries for an entity.
+def invalidate_cache(identifier: str) -> None:
+    """Invalidate all cached geometries for an identifier.
 
-    Call this when an entity is deleted or its geometry type changes.
+    Call this when a zone/integration/feature is deleted or its geometry type changes.
 
     Args:
-        entity_id: Entity identifier to invalidate
+        identifier: Identifier to invalidate (e.g., zone.home, integration_name, device_id)
     """
-    _invalidate_entity_cache(entity_id)
+    _invalidate_cache(identifier)
 
 
 def contains_point(
-    entity_id: str, geojson: dict[str, Any], longitude: float, latitude: float
+    identifier: str, geojson: dict[str, Any], longitude: float, latitude: float
 ) -> bool:
     """Check if a point is inside a geometry using cached prepared geometry.
 
@@ -147,7 +147,7 @@ def contains_point(
     Point coordinates must be provided as (longitude, latitude) to match.
 
     Args:
-        entity_id: Entity identifier for caching (e.g., zone.home)
+        identifier: Unique identifier for caching (e.g., zone.home, integration_name, device_id)
         geojson: GeoJSON geometry dictionary
         longitude: Point longitude (x coordinate)
         latitude: Point latitude (y coordinate)
@@ -155,7 +155,7 @@ def contains_point(
     Returns:
         True if point is inside (or on boundary of) the geometry
     """
-    prepared_geom = prepare_and_cache_geometry(entity_id, geojson)
+    prepared_geom = prepare_and_cache_geometry(identifier, geojson)
     point = Point(longitude, latitude)  # Shapely Point expects (x, y)
     return prepared_geom.covers(point)
 
