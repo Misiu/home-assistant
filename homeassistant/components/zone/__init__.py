@@ -58,9 +58,10 @@ from .const import (
     ATTR_RADIUS,
     ATTR_TYPE,
     CONF_PASSIVE,
-    DEFAULT_TYPE,
     DOMAIN,
     HOME_ZONE,
+    TYPE_CIRCLE,
+    TYPE_POLYGON,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,13 +75,13 @@ ENTITY_ID_HOME = ENTITY_ID_FORMAT.format(HOME_ZONE)
 ICON_HOME = "mdi:home"
 ICON_IMPORT = "mdi:import"
 
-ALLOWED_TYPES = [DEFAULT_TYPE, "polygon"]
+ALLOWED_TYPES = [TYPE_CIRCLE, TYPE_POLYGON]
 
 CREATE_FIELDS: VolDictType = {
     vol.Required(CONF_NAME): cv.string,
     vol.Required(CONF_LATITUDE): cv.latitude,
     vol.Required(CONF_LONGITUDE): cv.longitude,
-    vol.Optional(ATTR_TYPE, default=DEFAULT_TYPE): vol.In(ALLOWED_TYPES),
+    vol.Optional(ATTR_TYPE, default=TYPE_CIRCLE): vol.In(ALLOWED_TYPES),
     vol.Optional(CONF_RADIUS, default=DEFAULT_RADIUS): vol.Coerce(float),
     vol.Optional(ATTR_POINTS): vol.All(
         cv.ensure_list, [vol.All(cv.ensure_list, [vol.Coerce(float)])]
@@ -458,8 +459,8 @@ class Zone(collection.CollectionEntity):
             return
         
         # Invalidate geometry cache if zone type or geometry changes
-        old_type = self._config.get(ATTR_TYPE, DEFAULT_TYPE)
-        new_type = config.get(ATTR_TYPE, DEFAULT_TYPE)
+        old_type = self._config.get(ATTR_TYPE, TYPE_CIRCLE)
+        new_type = config.get(ATTR_TYPE, TYPE_CIRCLE)
         old_points = self._config.get(ATTR_POINTS)
         new_points = config.get(ATTR_POINTS)
         
@@ -525,11 +526,11 @@ class Zone(collection.CollectionEntity):
         }
 
         # Determine zone type and add geometry
-        zone_type = config.get(ATTR_TYPE, DEFAULT_TYPE)
+        zone_type = config.get(ATTR_TYPE, TYPE_CIRCLE)
         self._attr_extra_state_attributes[ATTR_TYPE] = zone_type
 
         # Handle polygon zones
-        if zone_type == "polygon" and ATTR_POINTS in config:
+        if zone_type == TYPE_POLYGON and ATTR_POINTS in config:
             # Store original points for backward compatibility
             self._attr_extra_state_attributes[ATTR_POINTS] = config[ATTR_POINTS]
             

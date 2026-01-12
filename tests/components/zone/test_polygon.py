@@ -7,6 +7,7 @@ import pytest
 from homeassistant import setup
 from homeassistant.components import zone
 from homeassistant.components.zone import DOMAIN
+from homeassistant.components.zone.const import TYPE_CIRCLE, TYPE_POLYGON
 from homeassistant.const import ATTR_ICON
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -21,7 +22,7 @@ async def test_setup_polygon_zone_with_points(hass: HomeAssistant) -> None:
         "name": "Test Polygon Zone",
         "latitude": 32.880837,
         "longitude": -117.237561,
-        "zone_type": "polygon",
+        "zone_type": TYPE_POLYGON,
         "points": [
             [32.882630, -117.240536],
             [32.882747, -117.236276],
@@ -139,14 +140,14 @@ async def test_circle_zone_still_works(hass: HomeAssistant) -> None:
         "name": "Circle Zone",
         "latitude": 32.880837,
         "longitude": -117.237561,
-        "zone_type": "circle",
+        "zone_type": TYPE_CIRCLE,
         "radius": 250,
         "passive": False,
     }
     assert await setup.async_setup_component(hass, zone.DOMAIN, {"zone": info})
 
     state = hass.states.get("zone.circle_zone")
-    assert state.attributes["zone_type"] == "circle"
+    assert state.attributes["zone_type"] == TYPE_CIRCLE
     assert state.attributes["radius"] == 250
 
     # Test in_zone for circle
@@ -165,7 +166,7 @@ async def test_default_circle_zone(hass: HomeAssistant) -> None:
     assert await setup.async_setup_component(hass, zone.DOMAIN, {"zone": info})
 
     state = hass.states.get("zone.default_zone")
-    assert state.attributes["zone_type"] == "circle"
+    assert state.attributes["zone_type"] == TYPE_CIRCLE
 
 
 async def test_ws_create_polygon_zone(
@@ -192,7 +193,7 @@ async def test_ws_create_polygon_zone(
     assert resp["success"]
 
     state = hass.states.get("zone.ws_polygon_zone")
-    assert state.attributes["zone_type"] == "polygon"
+    assert state.attributes["zone_type"] == TYPE_POLYGON
     assert state.attributes["points"] == [
         [32.88, -117.24],
         [32.89, -117.24],
@@ -222,7 +223,7 @@ async def test_import_polygon_config_entry(hass: HomeAssistant) -> None:
 
     state = hass.states.get("zone.imported_polygon")
     assert state is not None
-    assert state.attributes[zone.ATTR_TYPE] == "polygon"
+    assert state.attributes[zone.ATTR_TYPE] == TYPE_POLYGON
     assert state.attributes[zone.ATTR_POINTS] == [
         [32.88, -117.24],
         [32.89, -117.24],
