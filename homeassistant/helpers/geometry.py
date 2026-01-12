@@ -17,13 +17,12 @@ from typing import Any
 from shapely import prepare
 from shapely.geometry import Point, shape
 from shapely.geometry.base import BaseGeometry
-from shapely.prepared import PreparedGeometry
 
 
-# Cache for prepared geometries
+# Cache for geometries (prepared in-place via shapely.prepare())
 # Key: (zone_id, geometry_hash)
-# Value: PreparedGeometry
-_GEOMETRY_CACHE: dict[tuple[str, str], PreparedGeometry] = {}
+# Value: BaseGeometry (prepared)
+_GEOMETRY_CACHE: dict[tuple[str, str], BaseGeometry] = {}
 
 
 def _hash_geometry(geojson: dict[str, Any]) -> str:
@@ -63,12 +62,14 @@ def build_geometry_from_geojson(geojson: dict[str, Any]) -> BaseGeometry:
 
 def prepare_and_cache_geometry(
     zone_id: str, geojson: dict[str, Any]
-) -> PreparedGeometry:
+) -> BaseGeometry:
     """Build and cache a prepared geometry for efficient containment checks.
 
     Prepared geometries are optimized for repeated spatial predicates like
     contains() and covers(). The cache is keyed by zone_id and geometry content
     to automatically invalidate when the geometry changes.
+
+    In Shapely 2.x, prepare() modifies the geometry in-place for optimization.
 
     Thread-safety: Reads are safe, but concurrent updates should be avoided.
     In practice, zone updates happen on the event loop, so this is safe.
@@ -78,7 +79,7 @@ def prepare_and_cache_geometry(
         geojson: GeoJSON geometry dictionary
 
     Returns:
-        PreparedGeometry for efficient spatial operations
+        Prepared BaseGeometry for efficient spatial operations
     """
     geom_hash = _hash_geometry(geojson)
     cache_key = (zone_id, geom_hash)
@@ -87,10 +88,10 @@ def prepare_and_cache_geometry(
     if cache_key not in _GEOMETRY_CACHE:
         # Build the geometry from GeoJSON
         geom = build_geometry_from_geojson(geojson)
-        # Prepare it for efficient spatial operations
-        prepared = prepare(geom)
+        # Prepare it for efficient spatial operations (in-place in Shapely 2.x)
+        prepare(geom)
         # Cache it
-        _GEOMETRY_CACHE[cache_key] = prepared
+        _GEOMETRY_CACHE[cache_key] = geom
 
         # Clean up old cache entries for this zone_id (different geometry)
         _invalidate_zone_cache(zone_id, exclude_key=cache_key)
@@ -200,8 +201,9 @@ def _cached_point_check(
     geojson = json.loads(geojson_str)
     geom = build_geometry_from_geojson(geojson)
     point = Point(longitude, latitude)
-    prepared = prepare(geom)
-    return prepared.covers(point)
+    # Prepare the geometry for faster checks
+    prepare(geom)
+    return geom.covers(point)
 
 
 def clear_all_caches() -> None:
