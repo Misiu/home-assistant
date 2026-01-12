@@ -54,9 +54,9 @@ from homeassistant.util.location import distance
 from .const import (
     ATTR_GEOMETRY,
     ATTR_PASSIVE,
-    ATTR_POINTS,
     ATTR_RADIUS,
     ATTR_TYPE,
+    CONF_GEOMETRY,
     CONF_PASSIVE,
     DOMAIN,
     HOME_ZONE,
@@ -83,9 +83,7 @@ CREATE_FIELDS: VolDictType = {
     vol.Required(CONF_LONGITUDE): cv.longitude,
     vol.Optional(ATTR_TYPE, default=TYPE_CIRCLE): vol.In(ALLOWED_TYPES),
     vol.Optional(CONF_RADIUS, default=DEFAULT_RADIUS): vol.Coerce(float),
-    vol.Optional(ATTR_POINTS): vol.All(
-        cv.ensure_list, [vol.All(cv.ensure_list, [vol.Coerce(float)])]
-    ),
+    vol.Optional(CONF_GEOMETRY): dict,
     vol.Optional(CONF_PASSIVE, default=DEFAULT_PASSIVE): cv.boolean,
     vol.Optional(CONF_ICON): cv.icon,
 }
@@ -97,9 +95,7 @@ UPDATE_FIELDS: VolDictType = {
     vol.Optional(CONF_LONGITUDE): cv.longitude,
     vol.Optional(ATTR_TYPE): vol.In(ALLOWED_TYPES),
     vol.Optional(CONF_RADIUS): vol.Coerce(float),
-    vol.Optional(ATTR_POINTS): vol.All(
-        cv.ensure_list, [vol.All(cv.ensure_list, [vol.Coerce(float)])]
-    ),
+    vol.Optional(CONF_GEOMETRY): dict,
     vol.Optional(CONF_PASSIVE): cv.boolean,
     vol.Optional(CONF_ICON): cv.icon,
 }
@@ -160,8 +156,13 @@ def async_active_zone(
         ):
             continue
 
+        zone_type = zone_attrs.get(ATTR_TYPE, TYPE_CIRCLE)
+
         # Handle polygon zones with GeoJSON geometry
-        if ATTR_GEOMETRY in zone_attrs:
+        if zone_type == TYPE_POLYGON:
+            if ATTR_GEOMETRY not in zone_attrs:
+                _LOGGER.warning("Polygon zone %s missing geometry attribute", entity_id)
+                continue
             try:
                 if geom_helper.contains_point(
                     zone.entity_id, zone_attrs[ATTR_GEOMETRY], longitude, latitude
@@ -171,16 +172,6 @@ def async_active_zone(
                     return zone
             except (ValueError, KeyError) as err:
                 _LOGGER.warning("Invalid geometry for zone %s: %s", entity_id, err)
-            continue
-
-        # Legacy support: handle points-based polygon
-        if ATTR_POINTS in zone_attrs:
-            try:
-                geojson = geom_helper.points_to_geojson_polygon(zone_attrs[ATTR_POINTS])
-                if geom_helper.contains_point(zone.entity_id, geojson, longitude, latitude):
-                    return zone
-            except (ValueError, KeyError) as err:
-                _LOGGER.warning("Invalid points for zone %s: %s", entity_id, err)
             continue
 
         # Handle circular zones
@@ -250,9 +241,13 @@ def in_zone(zone: State, latitude: float, longitude: float, radius: float = 0) -
         return False
 
     zone_attrs = zone.attributes
+    zone_type = zone_attrs.get(ATTR_TYPE, TYPE_CIRCLE)
 
-    # Check if this is a polygon zone with GeoJSON geometry
-    if ATTR_GEOMETRY in zone_attrs:
+    # Handle polygon zones with GeoJSON geometry
+    if zone_type == TYPE_POLYGON:
+        if ATTR_GEOMETRY not in zone_attrs:
+            _LOGGER.warning("Polygon zone %s missing geometry attribute", zone.entity_id)
+            return False
         try:
             return geom_helper.contains_point(
                 zone.entity_id, zone_attrs[ATTR_GEOMETRY], longitude, latitude
@@ -261,19 +256,7 @@ def in_zone(zone: State, latitude: float, longitude: float, radius: float = 0) -
             _LOGGER.warning("Invalid geometry for zone %s: %s", zone.entity_id, err)
             return False
 
-    # Legacy support: check for points-based polygon
-    if ATTR_POINTS in zone_attrs:
-        try:
-            # Convert points to GeoJSON and check
-            geojson = geom_helper.points_to_geojson_polygon(zone_attrs[ATTR_POINTS])
-            return geom_helper.contains_point(
-                zone.entity_id, geojson, longitude, latitude
-            )
-        except (ValueError, KeyError) as err:
-            _LOGGER.warning("Invalid points for zone %s: %s", zone.entity_id, err)
-            return False
-
-    # Default: circular zone
+    # Handle circular zones (default)
     zone_dist = distance(
         latitude,
         longitude,
@@ -461,10 +444,10 @@ class Zone(collection.CollectionEntity):
         # Invalidate geometry cache if zone type or geometry changes
         old_type = self._config.get(ATTR_TYPE, TYPE_CIRCLE)
         new_type = config.get(ATTR_TYPE, TYPE_CIRCLE)
-        old_points = self._config.get(ATTR_POINTS)
-        new_points = config.get(ATTR_POINTS)
+        old_geometry = self._config.get(CONF_GEOMETRY)
+        new_geometry = config.get(CONF_GEOMETRY)
         
-        if old_type != new_type or old_points != new_points:
+        if old_type != new_type or old_geometry != new_geometry:
             geom_helper.invalidate_cache(self.entity_id)
         
         self._config = config
@@ -529,19 +512,9 @@ class Zone(collection.CollectionEntity):
         zone_type = config.get(ATTR_TYPE, TYPE_CIRCLE)
         self._attr_extra_state_attributes[ATTR_TYPE] = zone_type
 
-        # Handle polygon zones
-        if zone_type == TYPE_POLYGON and ATTR_POINTS in config:
-            # Store original points for backward compatibility
-            self._attr_extra_state_attributes[ATTR_POINTS] = config[ATTR_POINTS]
-            
-            # Convert points to GeoJSON geometry for efficient Shapely operations
-            try:
-                geojson = geom_helper.points_to_geojson_polygon(config[ATTR_POINTS])
-                self._attr_extra_state_attributes[ATTR_GEOMETRY] = geojson
-            except ValueError as err:
-                _LOGGER.error(
-                    "Invalid polygon points for zone %s: %s", self.entity_id, err
-                )
+        # Handle polygon zones - store GeoJSON geometry
+        if zone_type == TYPE_POLYGON and CONF_GEOMETRY in config:
+            self._attr_extra_state_attributes[ATTR_GEOMETRY] = config[CONF_GEOMETRY]
 
     @callback
     def _state_is_in_zone(self, state: State | None) -> bool:

@@ -1,11 +1,11 @@
 """Constants for the zone component."""
 
 CONF_PASSIVE = "passive"
+CONF_GEOMETRY = "geometry"
 DOMAIN = "zone"
 HOME_ZONE = "home"
 ATTR_PASSIVE = "passive"
 ATTR_RADIUS = "radius"
-ATTR_POINTS = "points"
 ATTR_GEOMETRY = "geometry"
 ATTR_TYPE = "zone_type"
 TYPE_CIRCLE = "circle"
