@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import dataclasses
 from datetime import datetime, timedelta
 import logging
+import re
 from typing import Any, cast
 
 from gcal_sync.api import Range, SyncEventsRequest
@@ -101,6 +102,7 @@ class GoogleCalendarEntityDescription(CalendarEntityDescription):
     search: str | None
     local_sync: bool
     device_id: str
+    color: str | None = None
     event_type: EventTypeEnum | None = None
 
 
@@ -161,6 +163,7 @@ def _get_entity_descriptions(
             local_sync=local_sync,
             entity_registry_enabled_default=entity_enabled,
             device_id=data[CONF_DEVICE_ID],
+            color=calendar_item.background_color,
         )
         entity_descriptions.append(entity_description)
         _LOGGER.debug(
@@ -363,6 +366,26 @@ class GoogleCalendarEntity(
             self._attr_supported_features = (
                 CalendarEntityFeature.CREATE_EVENT | CalendarEntityFeature.DELETE_EVENT
             )
+
+    def get_initial_entity_options(self) -> er.EntityOptionsType | None:
+        """Return initial entity options.
+
+        These will be stored in the entity registry the first time the entity is seen.
+        Provides the calendar color from the Google Calendar API.
+        """
+        if not (color := self.entity_description.color):
+            return None
+
+        # Validate hex color format (#RGB or #RRGGBB)
+        if not re.match(r"^#[0-9A-Fa-f]{6}$|^#[0-9A-Fa-f]{3}$", color):
+            _LOGGER.warning(
+                "Invalid color format for calendar %s: %s",
+                self.calendar_id,
+                color,
+            )
+            return None
+
+        return {"calendar": {"color": color}}
 
     @property
     def extra_state_attributes(self) -> dict[str, bool]:
