@@ -362,30 +362,11 @@ class GoogleCalendarEntity(
         if entity_description.entity_id:
             self.entity_id = entity_description.entity_id
         self._attr_unique_id = unique_id
+        self._attr_initial_color = entity_description.color
         if not entity_description.read_only:
             self._attr_supported_features = (
                 CalendarEntityFeature.CREATE_EVENT | CalendarEntityFeature.DELETE_EVENT
             )
-
-    def get_initial_entity_options(self) -> er.EntityOptionsType | None:
-        """Return initial entity options.
-
-        These will be stored in the entity registry the first time the entity is seen.
-        Provides the calendar color from the Google Calendar API.
-        """
-        if not (color := self.entity_description.color):
-            return None
-
-        # Validate hex color format (#RGB or #RRGGBB)
-        if not re.match(r"^#[0-9A-Fa-f]{6}$|^#[0-9A-Fa-f]{3}$", color):
-            _LOGGER.warning(
-                "Invalid color format for calendar %s: %s",
-                self.calendar_id,
-                color,
-            )
-            return None
-
-        return {"calendar": {"color": color}}
 
     @property
     def extra_state_attributes(self) -> dict[str, bool]:
