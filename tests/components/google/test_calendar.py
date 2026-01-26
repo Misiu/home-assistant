@@ -1572,7 +1572,7 @@ async def test_calendar_color_stored_in_entity_registry(
     mock_calendars_list: ApiResult,
     component_setup: ComponentSetup,
 ) -> None:
-    """Test that calendar background color from API is set as initial color."""
+    """Test that calendar background color from API is stored in entity registry."""
     # Set up calendar with background color
     calendar_with_color = {
         **test_api_calendar,
@@ -1582,10 +1582,12 @@ async def test_calendar_color_stored_in_entity_registry(
 
     assert await component_setup()
 
-    # Verify the entity has the color attribute set
-    state = hass.states.get(TEST_API_ENTITY)
-    assert state is not None
-    # The color attribute is managed by the calendar platform base class
+    # Verify the color is stored in entity registry options
+    entity_entry = entity_registry.async_get(TEST_API_ENTITY)
+    assert entity_entry is not None
+    assert "calendar" in entity_entry.options
+    assert "color" in entity_entry.options["calendar"]
+    assert entity_entry.options["calendar"]["color"] == "#16a765"
 
 
 @pytest.mark.parametrize("mock_test_setup", [None])
@@ -1596,7 +1598,7 @@ async def test_calendar_without_color(
     mock_calendars_list: ApiResult,
     component_setup: ComponentSetup,
 ) -> None:
-    """Test that calendar without background color works correctly."""
+    """Test that calendar without background color doesn't store color in entity registry."""
     # Set up calendar without background color (remove it from the test fixture)
     calendar_without_color = {
         key: value
@@ -1607,6 +1609,9 @@ async def test_calendar_without_color(
 
     assert await component_setup()
 
-    # Verify the entity was created successfully
-    state = hass.states.get(TEST_API_ENTITY)
-    assert state is not None
+    # Verify no color is stored in entity registry
+    entity_entry = entity_registry.async_get(TEST_API_ENTITY)
+    assert entity_entry is not None
+    # Either no calendar options at all, or no color in calendar options
+    if "calendar" in entity_entry.options:
+        assert "color" not in entity_entry.options["calendar"]
