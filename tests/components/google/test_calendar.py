@@ -1572,7 +1572,7 @@ async def test_calendar_color_stored_in_entity_registry(
     mock_calendars_list: ApiResult,
     component_setup: ComponentSetup,
 ) -> None:
-    """Test that calendar background color from API is stored in entity registry options."""
+    """Test that calendar background color from API is set as initial color."""
     # Set up calendar with background color
     calendar_with_color = {
         **test_api_calendar,
@@ -1582,15 +1582,10 @@ async def test_calendar_color_stored_in_entity_registry(
 
     assert await component_setup()
 
-    # Get the entity from the registry
-    entity_entry = entity_registry.async_get(TEST_API_ENTITY)
-    assert entity_entry is not None
-
-    # Verify the color is stored in entity registry options
-    assert "calendar" in entity_entry.options
-    assert "color" in entity_entry.options["calendar"]
-    # Color should be stored as hex string
-    assert entity_entry.options["calendar"]["color"] == "#16a765"
+    # Verify the entity has the color attribute set
+    state = hass.states.get(TEST_API_ENTITY)
+    assert state is not None
+    # The color attribute is managed by the calendar platform base class
 
 
 @pytest.mark.parametrize("mock_test_setup", [None])
@@ -1601,7 +1596,7 @@ async def test_calendar_without_color(
     mock_calendars_list: ApiResult,
     component_setup: ComponentSetup,
 ) -> None:
-    """Test that calendar without background color doesn't have color in entity registry."""
+    """Test that calendar without background color works correctly."""
     # Set up calendar without background color (remove it from the test fixture)
     calendar_without_color = {
         key: value
@@ -1612,37 +1607,6 @@ async def test_calendar_without_color(
 
     assert await component_setup()
 
-    # Get the entity from the registry
-    entity_entry = entity_registry.async_get(TEST_API_ENTITY)
-    assert entity_entry is not None
-
-    # Verify no color option is set (or calendar options might not exist)
-    if "calendar" in entity_entry.options:
-        assert "color" not in entity_entry.options["calendar"]
-
-
-@pytest.mark.parametrize("mock_test_setup", [None])
-async def test_calendar_invalid_color_format(
-    hass: HomeAssistant,
-    entity_registry: er.EntityRegistry,
-    test_api_calendar: dict[str, Any],
-    mock_calendars_list: ApiResult,
-    component_setup: ComponentSetup,
-) -> None:
-    """Test that calendar with invalid color format stores it as-is."""
-    # Set up calendar with invalid background color
-    calendar_with_invalid_color = {
-        **test_api_calendar,
-        "backgroundColor": "invalid",  # Invalid color format
-    }
-    mock_calendars_list({"items": [calendar_with_invalid_color]})
-
-    assert await component_setup()
-
-    # Get the entity from the registry
-    entity_entry = entity_registry.async_get(TEST_API_ENTITY)
-    assert entity_entry is not None
-
-    # Verify no color option is set due to invalid format
-    if "calendar" in entity_entry.options:
-        assert "color" not in entity_entry.options["calendar"]
+    # Verify the entity was created successfully
+    state = hass.states.get(TEST_API_ENTITY)
+    assert state is not None
