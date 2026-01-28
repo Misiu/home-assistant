@@ -42,6 +42,7 @@ from homeassistant.helpers import (
     config_validation as cv,
     entity_component,
     event,
+    geometry as geom_helper,
     service,
     storage,
 )
@@ -50,7 +51,18 @@ from homeassistant.loader import bind_hass
 from homeassistant.util.hass_dict import HassKey
 from homeassistant.util.location import distance
 
-from .const import ATTR_PASSIVE, ATTR_RADIUS, CONF_PASSIVE, DOMAIN, HOME_ZONE
+from .const import (
+    ATTR_GEOMETRY,
+    ATTR_PASSIVE,
+    ATTR_RADIUS,
+    ATTR_TYPE,
+    CONF_GEOMETRY,
+    CONF_PASSIVE,
+    DOMAIN,
+    HOME_ZONE,
+    TYPE_CIRCLE,
+    TYPE_POLYGON,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,11 +75,15 @@ ENTITY_ID_HOME = ENTITY_ID_FORMAT.format(HOME_ZONE)
 ICON_HOME = "mdi:home"
 ICON_IMPORT = "mdi:import"
 
+ALLOWED_TYPES = [TYPE_CIRCLE, TYPE_POLYGON]
+
 CREATE_FIELDS: VolDictType = {
     vol.Required(CONF_NAME): cv.string,
     vol.Required(CONF_LATITUDE): cv.latitude,
     vol.Required(CONF_LONGITUDE): cv.longitude,
+    vol.Optional(ATTR_TYPE, default=TYPE_CIRCLE): vol.In(ALLOWED_TYPES),
     vol.Optional(CONF_RADIUS, default=DEFAULT_RADIUS): vol.Coerce(float),
+    vol.Optional(CONF_GEOMETRY): dict,
     vol.Optional(CONF_PASSIVE, default=DEFAULT_PASSIVE): cv.boolean,
     vol.Optional(CONF_ICON): cv.icon,
 }
@@ -77,7 +93,9 @@ UPDATE_FIELDS: VolDictType = {
     vol.Optional(CONF_NAME): cv.string,
     vol.Optional(CONF_LATITUDE): cv.latitude,
     vol.Optional(CONF_LONGITUDE): cv.longitude,
+    vol.Optional(ATTR_TYPE): vol.In(ALLOWED_TYPES),
     vol.Optional(CONF_RADIUS): vol.Coerce(float),
+    vol.Optional(CONF_GEOMETRY): dict,
     vol.Optional(CONF_PASSIVE): cv.boolean,
     vol.Optional(CONF_ICON): cv.icon,
 }
@@ -135,20 +153,40 @@ def async_active_zone(
             or zone.state == STATE_UNAVAILABLE
             # Skip passive zones
             or (zone_attrs := zone.attributes).get(ATTR_PASSIVE)
-            # Skip zones where we cannot calculate distance
-            or (
-                zone_dist := distance(
-                    latitude,
-                    longitude,
-                    zone_attrs[ATTR_LATITUDE],
-                    zone_attrs[ATTR_LONGITUDE],
-                )
-            )
-            is None
-            # Skip zone that are outside the radius aka the
-            # lat/long is outside the zone
-            or not (zone_dist - (zone_radius := zone_attrs[ATTR_RADIUS]) < radius)
         ):
+            continue
+
+        zone_type = zone_attrs.get(ATTR_TYPE, TYPE_CIRCLE)
+
+        # Handle polygon zones with GeoJSON geometry
+        if zone_type == TYPE_POLYGON:
+            if ATTR_GEOMETRY not in zone_attrs:
+                _LOGGER.warning("Polygon zone %s missing geometry attribute", entity_id)
+                continue
+            try:
+                if geom_helper.contains_point(
+                    zone.entity_id, zone_attrs[ATTR_GEOMETRY], longitude, latitude
+                ):
+                    # For polygon zones, we can't easily compute "distance"
+                    # Just return the first matching polygon zone
+                    return zone
+            except (ValueError, KeyError) as err:
+                _LOGGER.warning("Invalid geometry for zone %s: %s", entity_id, err)
+            continue
+
+        # Handle circular zones
+        if (
+            zone_dist := distance(
+                latitude,
+                longitude,
+                zone_attrs[ATTR_LATITUDE],
+                zone_attrs[ATTR_LONGITUDE],
+            )
+        ) is None:
+            continue
+
+        # Skip zones where we cannot calculate distance or point is outside
+        if not (zone_dist - (zone_radius := zone_attrs[ATTR_RADIUS]) < radius):
             continue
 
         # If have a closest and its not closer than the closest skip it
@@ -202,16 +240,33 @@ def in_zone(zone: State, latitude: float, longitude: float, radius: float = 0) -
     if zone.state == STATE_UNAVAILABLE:
         return False
 
+    zone_attrs = zone.attributes
+    zone_type = zone_attrs.get(ATTR_TYPE, TYPE_CIRCLE)
+
+    # Handle polygon zones with GeoJSON geometry
+    if zone_type == TYPE_POLYGON:
+        if ATTR_GEOMETRY not in zone_attrs:
+            _LOGGER.warning("Polygon zone %s missing geometry attribute", zone.entity_id)
+            return False
+        try:
+            return geom_helper.contains_point(
+                zone.entity_id, zone_attrs[ATTR_GEOMETRY], longitude, latitude
+            )
+        except (ValueError, KeyError) as err:
+            _LOGGER.warning("Invalid geometry for zone %s: %s", zone.entity_id, err)
+            return False
+
+    # Handle circular zones (default)
     zone_dist = distance(
         latitude,
         longitude,
-        zone.attributes[ATTR_LATITUDE],
-        zone.attributes[ATTR_LONGITUDE],
+        zone_attrs[ATTR_LATITUDE],
+        zone_attrs[ATTR_LONGITUDE],
     )
 
-    if zone_dist is None or zone.attributes[ATTR_RADIUS] is None:
+    if zone_dist is None or zone_attrs[ATTR_RADIUS] is None:
         return False
-    return zone_dist - radius < cast(float, zone.attributes[ATTR_RADIUS])
+    return zone_dist - radius < cast(float, zone_attrs[ATTR_RADIUS])
 
 
 class ZoneStorageCollection(collection.DictStorageCollection):
@@ -385,10 +440,26 @@ class Zone(collection.CollectionEntity):
         """Handle when the config is updated."""
         if self._config == config:
             return
+        
+        # Invalidate geometry cache if zone type or geometry changes
+        old_type = self._config.get(ATTR_TYPE, TYPE_CIRCLE)
+        new_type = config.get(ATTR_TYPE, TYPE_CIRCLE)
+        old_geometry = self._config.get(CONF_GEOMETRY)
+        new_geometry = config.get(CONF_GEOMETRY)
+        
+        if old_type != new_type or old_geometry != new_geometry:
+            geom_helper.invalidate_cache(self.entity_id)
+        
         self._config = config
         self._set_attrs_from_config()
         self._generate_attrs()
         self.async_write_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Run when entity will be removed from hass."""
+        await super().async_will_remove_from_hass()
+        # Clean up geometry cache when zone is removed
+        geom_helper.invalidate_cache(self.entity_id)
 
     @callback
     def _person_state_change_listener(self, evt: Event[EventStateChangedData]) -> None:
@@ -426,14 +497,24 @@ class Zone(collection.CollectionEntity):
     @callback
     def _generate_attrs(self) -> None:
         """Generate new attrs based on config."""
+        config = self._config
+        
         self._attr_extra_state_attributes = {
-            ATTR_LATITUDE: self._config[CONF_LATITUDE],
-            ATTR_LONGITUDE: self._config[CONF_LONGITUDE],
-            ATTR_RADIUS: self._config[CONF_RADIUS],
-            ATTR_PASSIVE: self._config[CONF_PASSIVE],
+            ATTR_LATITUDE: config[CONF_LATITUDE],
+            ATTR_LONGITUDE: config[CONF_LONGITUDE],
+            ATTR_RADIUS: config[CONF_RADIUS],
+            ATTR_PASSIVE: config[CONF_PASSIVE],
             ATTR_PERSONS: sorted(self._persons_in_zone),
             ATTR_EDITABLE: self.editable,
         }
+
+        # Determine zone type and add geometry
+        zone_type = config.get(ATTR_TYPE, TYPE_CIRCLE)
+        self._attr_extra_state_attributes[ATTR_TYPE] = zone_type
+
+        # Handle polygon zones - store GeoJSON geometry
+        if zone_type == TYPE_POLYGON and CONF_GEOMETRY in config:
+            self._attr_extra_state_attributes[ATTR_GEOMETRY] = config[CONF_GEOMETRY]
 
     @callback
     def _state_is_in_zone(self, state: State | None) -> bool:
