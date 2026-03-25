@@ -1,6 +1,7 @@
 """Tests for the Whois config flow."""
 
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from syrupy.assertion import SnapshotAssertion
@@ -14,6 +15,7 @@ from whoisdomain.exceptions import (
 )
 
 from homeassistant.components.whois.const import DOMAIN
+from homeassistant.components.whois.models import WhoisData
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_DOMAIN
 from homeassistant.core import HomeAssistant
@@ -63,7 +65,7 @@ async def test_full_flow_with_error(
     mock_setup_entry: AsyncMock,
     mock_whois: MagicMock,
     snapshot: SnapshotAssertion,
-    throw: Exception,
+    throw: type[Exception],
     reason: str,
 ) -> None:
     """Test the full user configuration flow with an error.
@@ -79,10 +81,16 @@ async def test_full_flow_with_error(
     assert result.get("step_id") == "user"
 
     mock_whois.side_effect = throw
-    result2 = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        user_input={CONF_DOMAIN: "Example.com"},
-    )
+    # For exceptions that trigger RDAP fallback, make RDAP also fail so the
+    # original error reason is surfaced to the user.
+    with patch(
+        "homeassistant.components.whois.config_flow.async_fetch_rdap_data",
+        side_effect=ValueError("RDAP also failed"),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_DOMAIN: "Example.com"},
+        )
 
     assert result2.get("type") is FlowResultType.FORM
     assert result2.get("step_id") == "user"
@@ -102,6 +110,39 @@ async def test_full_flow_with_error(
 
     assert len(mock_setup_entry.mock_calls) == 1
     assert len(mock_whois.mock_calls) == 2
+
+
+async def test_full_flow_rdap_fallback(
+    hass: HomeAssistant,
+    mock_setup_entry: AsyncMock,
+    mock_whois: MagicMock,
+    snapshot: SnapshotAssertion,
+) -> None:
+    """Test the config flow succeeds via RDAP when WHOIS fails (e.g. missing binary)."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+
+    assert result.get("type") is FlowResultType.FORM
+    assert result.get("step_id") == "user"
+
+    mock_whois.side_effect = WhoisCommandFailed
+    rdap_data = WhoisData(
+        expiration_date=datetime(2026, 9, 19, 11, 4, 53, tzinfo=UTC),
+        registrar="OVH SAS",
+    )
+
+    with patch(
+        "homeassistant.components.whois.config_flow.async_fetch_rdap_data",
+        return_value=rdap_data,
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_DOMAIN: "jagusz.pl"},
+        )
+
+    assert result2.get("type") is FlowResultType.CREATE_ENTRY
+    assert len(mock_setup_entry.mock_calls) == 1
 
 
 @pytest.mark.usefixtures("mock_whois")
