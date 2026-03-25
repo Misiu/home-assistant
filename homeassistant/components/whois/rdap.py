@@ -28,8 +28,8 @@ def _parse_rdap_datetime(date_str: str) -> datetime | None:
     if not date_str:
         return None
     try:
-        # Strip sub-second precision (e.g. nanoseconds) that fromisoformat rejects
-        # and normalise the 'Z' UTC designator to the '+00:00' form.
+        # Strip any sub-second precision (milliseconds, microseconds, nanoseconds, etc.)
+        # that fromisoformat rejects, and normalise the 'Z' UTC designator to '+00:00'.
         normalized = re.sub(r"\.\d+Z$", "Z", date_str)
         return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
     except (ValueError, AttributeError):

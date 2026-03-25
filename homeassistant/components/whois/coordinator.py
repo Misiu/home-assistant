@@ -77,12 +77,11 @@ class WhoisCoordinator(DataUpdateCoordinator[WhoisData | None]):
             result = await self.hass.async_add_executor_job(
                 whoisdomain_query, domain_name
             )
-        except UnknownTld as ex:
+        except UnknownTld:
             LOGGER.debug(
                 "TLD not in whoisdomain for %s, trying RDAP fallback", domain_name
             )
             needs_rdap = True
-            _whois_exc: Exception = ex
         except (
             FailedParsingWhoisOutput,
             WhoisCommandFailed,
@@ -95,7 +94,6 @@ class WhoisCoordinator(DataUpdateCoordinator[WhoisData | None]):
                 ex,
             )
             needs_rdap = True
-            _whois_exc = ex
         else:
             if result is None:
                 return None
