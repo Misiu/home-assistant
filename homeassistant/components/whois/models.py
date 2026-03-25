@@ -8,11 +8,10 @@ from datetime import datetime
 
 @dataclass
 class WhoisData:
-    """Represent parsed WHOIS/RDAP domain information.
+    """Represent parsed domain information returned by whoisit via RDAP.
 
-    Used as the coordinator data type so that both the whoisdomain WHOIS
-    library and the RDAP HTTP fallback can produce an identical data shape,
-    decoupling the rest of the integration from the whoisdomain library.
+    Decouples the rest of the integration from the whoisit library so that
+    sensors and other consumers work with a stable internal data shape.
     """
 
     admin: str | None = None

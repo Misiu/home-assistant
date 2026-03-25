@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import datetime
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -15,6 +14,29 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from tests.common import MockConfigEntry
+
+# ---------------------------------------------------------------------------
+# Realistic whoisit.domain_async() return value used across all tests.
+# Mirrors what the library returns for a domain with full RDAP data, based
+# on the structure confirmed by the user's real jagusz.pl test run.
+# ---------------------------------------------------------------------------
+_MOCK_DOMAIN_RESULT: dict = {
+    "expiration_date": datetime(2023, 1, 1, 0, 0, 0, tzinfo=UTC),
+    "registration_date": datetime(2019, 1, 1, 0, 0, 0),
+    "last_changed_date": datetime(
+        2022, 1, 1, 0, 0, 0, tzinfo=dt_util.get_time_zone("Europe/Amsterdam")
+    ),
+    "nameservers": ["ns1.example.com", "ns2.example.com"],
+    "dnssec": True,
+    "status": ["ok"],
+    "entities": {
+        "registrar": [{"name": "My Registrar", "type": "entity"}],
+        "registrant": [{"name": "registrant@example.com", "type": "entity"}],
+    },
+    "handle": "",
+    "name": "home-assistant.io",
+    "type": "domain",
+}
 
 
 @pytest.fixture
@@ -40,84 +62,41 @@ def mock_setup_entry() -> Generator[AsyncMock]:
 
 
 @pytest.fixture
-def mock_whois() -> Generator[MagicMock]:
-    """Return a mocked query."""
+def mock_whoisit() -> Generator[AsyncMock]:
+    """Mock whoisit.domain_async used by coordinator and config flow.
+
+    Patches:
+    - ``is_bootstrapped`` → True  (skip bootstrap network call in tests)
+    - ``bootstrap_async``  → no-op AsyncMock
+    - ``domain_async``     → returns _MOCK_DOMAIN_RESULT
+
+    Because coordinator.py and config_flow.py both do ``import whoisit``,
+    Python's module cache means they share the same module object.  Patching
+    via the coordinator import path therefore covers both modules.
+    """
     with (
         patch(
-            "homeassistant.components.whois.coordinator.whoisdomain_query",
-        ) as whois_mock,
-        patch(
-            "homeassistant.components.whois.config_flow.whoisdomain.query",
-            new=whois_mock,
+            "homeassistant.components.whois.coordinator.whoisit.is_bootstrapped",
+            return_value=True,
         ),
+        patch(
+            "homeassistant.components.whois.coordinator.whoisit.bootstrap_async",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "homeassistant.components.whois.coordinator.whoisit.domain_async",
+            new_callable=AsyncMock,
+        ) as domain_mock,
     ):
-        domain = whois_mock.return_value
-        domain.abuse_contact = "abuse@example.com"
-        domain.admin = "admin@example.com"
-        domain.creation_date = datetime(2019, 1, 1, 0, 0, 0)
-        domain.dnssec = True
-        domain.expiration_date = datetime(2023, 1, 1, 0, 0, 0)
-        domain.last_updated = datetime(
-            2022, 1, 1, 0, 0, 0, tzinfo=dt_util.get_time_zone("Europe/Amsterdam")
-        )
-        domain.name = "home-assistant.io"
-        domain.name_servers = ["ns1.example.com", "ns2.example.com"]
-        domain.owner = "owner@example.com"
-        domain.registrant = "registrant@example.com"
-        domain.registrar = "My Registrar"
-        domain.reseller = "Top Domains, Low Prices"
-        domain.status = "ok"
-        domain.statuses = ["OK"]
-        yield whois_mock
-
-
-@pytest.fixture
-def mock_whois_missing_some_attrs() -> Generator[Mock]:
-    """Return a mocked query that only sets admin."""
-
-    class LimitedWhoisMock:
-        """A limited mock of whois_query."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            """Mock only attributes the library always sets being available."""
-            self.creation_date = datetime(2019, 1, 1, 0, 0, 0)
-            self.dnssec = True
-            self.expiration_date = datetime(2023, 1, 1, 0, 0, 0)
-            self.last_updated = datetime(
-                2022, 1, 1, 0, 0, 0, tzinfo=dt_util.get_time_zone("Europe/Amsterdam")
-            )
-            self.name = "home-assistant.io"
-            self.name_servers = ["ns1.example.com", "ns2.example.com"]
-            self.registrar = "My Registrar"
-            self.status = "ok"
-            self.statuses = ["OK"]
-
-    with patch(
-        "homeassistant.components.whois.coordinator.whoisdomain_query", LimitedWhoisMock
-    ) as whois_mock:
-        yield whois_mock
+        domain_mock.return_value = _MOCK_DOMAIN_RESULT
+        yield domain_mock
 
 
 @pytest.fixture
 async def init_integration(
-    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_whois: MagicMock
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_whoisit: AsyncMock
 ) -> MockConfigEntry:
-    """Set up thewhois integration for testing."""
-    mock_config_entry.add_to_hass(hass)
-
-    await hass.config_entries.async_setup(mock_config_entry.entry_id)
-    await hass.async_block_till_done()
-
-    return mock_config_entry
-
-
-@pytest.fixture
-async def init_integration_missing_some_attrs(
-    hass: HomeAssistant,
-    mock_config_entry: MockConfigEntry,
-    mock_whois_missing_some_attrs: MagicMock,
-) -> MockConfigEntry:
-    """Set up thewhois integration for testing."""
+    """Set up the Whois integration for testing."""
     mock_config_entry.add_to_hass(hass)
 
     await hass.config_entries.async_setup(mock_config_entry.entry_id)

@@ -1,18 +1,11 @@
 """Tests for the Whois integration."""
 
-from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-from whoisdomain.exceptions import (
-    FailedParsingWhoisOutput,
-    UnknownDateFormat,
-    UnknownTld,
-    WhoisCommandFailed,
-)
+from whoisit.errors import BootstrapError, ParseError, QueryError, UnsupportedError
 
 from homeassistant.components.whois.const import DOMAIN
-from homeassistant.components.whois.models import WhoisData
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
@@ -22,7 +15,7 @@ from tests.common import MockConfigEntry
 async def test_load_unload_config_entry(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    mock_whois: MagicMock,
+    mock_whoisit: AsyncMock,
 ) -> None:
     """Test the Whois configuration entry loading/unloading."""
     mock_config_entry.add_to_hass(hass)
@@ -30,7 +23,7 @@ async def test_load_unload_config_entry(
     await hass.async_block_till_done()
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
-    assert len(mock_whois.mock_calls) == 1
+    assert len(mock_whoisit.mock_calls) == 1
 
     await hass.config_entries.async_unload(mock_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -42,89 +35,77 @@ async def test_load_unload_config_entry(
 @pytest.mark.parametrize(
     "side_effect",
     [
-        FailedParsingWhoisOutput,
-        UnknownDateFormat,
-        UnknownTld,
-        WhoisCommandFailed,
-        OSError,
+        BootstrapError(),
+        UnsupportedError(),
+        QueryError("test"),
+        ParseError(),
     ],
 )
 async def test_error_handling(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    mock_whois: MagicMock,
-    side_effect: type[Exception],
+    mock_whoisit: AsyncMock,
+    side_effect: Exception,
 ) -> None:
-    """Test the Whois threw an error and RDAP also fails → SETUP_RETRY."""
+    """Test that RDAP errors cause SETUP_RETRY."""
     mock_config_entry.add_to_hass(hass)
-    mock_whois.side_effect = side_effect
+    mock_whoisit.side_effect = side_effect
 
-    # Both WHOIS and RDAP fail → the integration should retry setup.
-    with patch(
-        "homeassistant.components.whois.coordinator.async_fetch_rdap_data",
-        side_effect=ValueError("RDAP also failed"),
-    ):
-        await hass.config_entries.async_setup(mock_config_entry.entry_id)
-        await hass.async_block_till_done()
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
 
     assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
-    assert len(mock_whois.mock_calls) == 1
+    assert len(mock_whoisit.mock_calls) == 1
 
 
-async def test_rdap_fallback_on_whois_failure(
+async def test_polish_domain(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    mock_whois: MagicMock,
+    mock_whoisit: AsyncMock,
 ) -> None:
-    """Test that RDAP is used when WHOIS completely fails (e.g. missing binary)."""
+    """Test that Polish .pl domains load correctly via whoisit with overrides=True.
+
+    Polish domains from rdap.dns.pl omit the 'handle' field and return an
+    empty status list — both handled by whoisit when bootstrapped with
+    overrides=True.  Test data is based on the real whoisit output for
+    google.pl.
+    """
+    from datetime import UTC, datetime
+
     mock_config_entry.add_to_hass(hass)
-    mock_whois.side_effect = WhoisCommandFailed
+    mock_whoisit.return_value = {
+        "expiration_date": datetime(2026, 9, 18, 12, 0, tzinfo=UTC),
+        "registration_date": datetime(2002, 9, 19, 11, 0, tzinfo=UTC),
+        "last_changed_date": datetime(2025, 8, 17, 10, 16, 24, tzinfo=UTC),
+        "nameservers": [
+            "ns1.google.com",
+            "ns2.google.com",
+            "ns3.google.com",
+            "ns4.google.com",
+        ],
+        "dnssec": False,
+        "status": [],  # .pl domains return an empty status list
+        "entities": {
+            "registrant": [{"name": "Google LLC", "type": "entity"}],
+            "registrar": [{"name": "Markmonitor, Inc.", "type": "entity"}],
+        },
+        "handle": "",  # rdap.dns.pl omits handle; overrides=True handles this
+        "name": "google.pl",
+        "type": "domain",
+    }
 
-    rdap_data = WhoisData(
-        creation_date=datetime(2011, 9, 19, 11, 4, 53, tzinfo=UTC),
-        expiration_date=datetime(2026, 9, 19, 11, 4, 53, tzinfo=UTC),
-        registrar="OVH SAS",
-        dnssec=True,
-        name_servers=["dns102.ovh.net", "ns102.ovh.net"],
-    )
-
-    with patch(
-        "homeassistant.components.whois.coordinator.async_fetch_rdap_data",
-        return_value=rdap_data,
-    ):
-        await hass.config_entries.async_setup(mock_config_entry.entry_id)
-        await hass.async_block_till_done()
+    await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
-
-async def test_rdap_fallback_on_missing_expiration(
-    hass: HomeAssistant,
-    mock_config_entry: MockConfigEntry,
-    mock_whois: MagicMock,
-) -> None:
-    """Test RDAP is used to fill in expiration when WHOIS omits it (e.g. .pl GDPR)."""
-    mock_config_entry.add_to_hass(hass)
-    # WHOIS succeeds but returns no expiration date (GDPR-redacted .pl domain)
-    mock_whois.return_value.expiration_date = None
-
-    rdap_data = WhoisData(
-        expiration_date=datetime(2026, 9, 19, 11, 4, 53, tzinfo=UTC),
-    )
-
-    with patch(
-        "homeassistant.components.whois.coordinator.async_fetch_rdap_data",
-        return_value=rdap_data,
-    ) as mock_rdap:
-        await hass.config_entries.async_setup(mock_config_entry.entry_id)
-        await hass.async_block_till_done()
-
-    assert mock_config_entry.state is ConfigEntryState.LOADED
-    assert mock_rdap.call_count == 1
-    # Verify the expiration date was filled in from RDAP
     coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]
-    assert coordinator.data is not None
-    assert coordinator.data.expiration_date == datetime(
-        2026, 9, 19, 11, 4, 53, tzinfo=UTC
-    )
-
+    data = coordinator.data
+    assert data is not None
+    assert data.expiration_date == datetime(2026, 9, 18, 12, 0, tzinfo=UTC)
+    assert data.registrar == "Markmonitor, Inc."
+    assert data.registrant == "Google LLC"
+    assert data.dnssec is False
+    assert data.status is None  # empty list → None
+    assert data.statuses == []
+    assert "ns1.google.com" in data.name_servers

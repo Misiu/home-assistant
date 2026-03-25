@@ -6,6 +6,6 @@
   "documentation": "https://www.home-assistant.io/integrations/whois",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "loggers": ["whoisdomain"],
-  "requirements": ["whoisdomain==1.20260106.1"]
+  "loggers": ["whoisit"],
+  "requirements": ["whoisit==4.0.3"]
 }
