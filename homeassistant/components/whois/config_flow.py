@@ -5,14 +5,20 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-import whoisit
-from whoisit.errors import BootstrapError, ParseError, QueryError, UnsupportedError
+import whoisdomain
+from whoisdomain.exceptions import (
+    FailedParsingWhoisOutput,
+    UnknownDateFormat,
+    UnknownTld,
+    WhoisCommandFailed,
+    WhoisPrivateRegistry,
+    WhoisQuotaExceeded,
+)
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_DOMAIN
 
 from .const import DOMAIN
-from .coordinator import _async_ensure_bootstrap
 
 
 class WhoisFlowHandler(ConfigFlow, domain=DOMAIN):
@@ -35,14 +41,19 @@ class WhoisFlowHandler(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             try:
-                await _async_ensure_bootstrap(self.hass)
-                await whoisit.domain_async(domain)
-            except BootstrapError:
-                errors["base"] = "cannot_connect"
-            except UnsupportedError:
+                await self.hass.async_add_executor_job(whoisdomain.query, domain)
+            except UnknownTld:
                 errors["base"] = "unknown_tld"
-            except (QueryError, ParseError):
+            except WhoisCommandFailed:
+                errors["base"] = "whois_command_failed"
+            except FailedParsingWhoisOutput:
                 errors["base"] = "unexpected_response"
+            except UnknownDateFormat:
+                errors["base"] = "unknown_date_format"
+            except WhoisPrivateRegistry:
+                errors["base"] = "private_registry"
+            except WhoisQuotaExceeded:
+                errors["base"] = "quota_exceeded"
             else:
                 return self.async_create_entry(
                     title=self.imported_name or user_input[CONF_DOMAIN],

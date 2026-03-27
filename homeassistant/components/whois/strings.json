@@ -4,9 +4,12 @@
       "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
     },
     "error": {
-      "cannot_connect": "Could not connect to the RDAP service",
-      "unexpected_response": "Unexpected response from the RDAP service",
-      "unknown_tld": "The given TLD is unknown or not supported by the RDAP service"
+      "private_registry": "The given domain is registered in a private registry and cannot be monitored",
+      "quota_exceeded": "Your whois quota has been exceeded for this TLD",
+      "unexpected_response": "Unexpected response from whois server",
+      "unknown_date_format": "Unknown date format in whois server response",
+      "unknown_tld": "The given TLD is unknown or not available to this integration",
+      "whois_command_failed": "Whois command failed: could not retrieve whois information"
     },
     "step": {
       "user": {

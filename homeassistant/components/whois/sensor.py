@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 
+from whoisdomain import Domain
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -29,18 +31,28 @@ from .const import (
     STATUS_TYPES,
 )
 from .coordinator import WhoisCoordinator
-from .models import WhoisData
 
 
 @dataclass(frozen=True, kw_only=True)
 class WhoisSensorEntityDescription(SensorEntityDescription):
     """Describes a Whois sensor entity."""
 
-    value_fn: Callable[[WhoisData], datetime | int | str | None]
+    value_fn: Callable[[Domain], datetime | int | str | None]
+
+
+def _days_until_expiration(domain: Domain) -> int | None:
+    """Calculate days left until domain expires."""
+    if domain.expiration_date is None:
+        return None
+    # We need to cast here, as (unlike Pyright) mypy isn't able to determine the type.
+    return cast(
+        int,
+        (domain.expiration_date - dt_util.utcnow().replace(tzinfo=None)).days,
+    )
 
 
 def _ensure_timezone(timestamp: datetime | None) -> datetime | None:
-    """Return *timestamp* with UTC timezone if it has no timezone info."""
+    """Calculate days left until domain expires."""
     if timestamp is None:
         return None
 
@@ -49,17 +61,6 @@ def _ensure_timezone(timestamp: datetime | None) -> datetime | None:
         return timestamp.replace(tzinfo=UTC)
 
     return timestamp
-
-
-def _days_until_expiration(domain: WhoisData) -> int | None:
-    """Calculate days left until domain expires."""
-    if (expiration_date := _ensure_timezone(domain.expiration_date)) is None:
-        return None
-    # We need to cast here, as (unlike Pyright) mypy isn't able to determine the type.
-    return cast(
-        int,
-        (expiration_date - dt_util.utcnow()).days,
-    )
 
 
 def _get_status_type(status: str | None) -> str | None:

@@ -1,6 +1,6 @@
 """Tests for the sensors provided by the Whois integration."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import pytest
 from syrupy.assertion import SnapshotAssertion
@@ -55,6 +55,17 @@ async def test_whois_sensors(
     assert device_entry == snapshot
 
 
+async def test_whois_sensors_missing_some_attrs(
+    hass: HomeAssistant, entity_registry: er.EntityRegistry, snapshot: SnapshotAssertion
+) -> None:
+    """Test the Whois sensors with owner and reseller missing."""
+    assert (state := hass.states.get("sensor.home_assistant_io_last_updated"))
+    assert state == snapshot
+
+    assert (entry := entity_registry.async_get("sensor.home_assistant_io_last_updated"))
+    assert entry == snapshot
+
+
 @pytest.mark.parametrize(
     "entity_id",
     [
@@ -93,10 +104,10 @@ async def test_disabled_by_default_sensors(
     ],
 )
 async def test_no_data(
-    hass: HomeAssistant, mock_whoisit: AsyncMock, entity_id: str
+    hass: HomeAssistant, mock_whois: MagicMock, entity_id: str
 ) -> None:
     """Test whois sensors become unknown when there is no data provided."""
-    mock_whoisit.return_value = None
+    mock_whois.return_value = None
 
     async_fire_time_changed(hass, dt_util.utcnow() + SCAN_INTERVAL)
     await hass.async_block_till_done()
