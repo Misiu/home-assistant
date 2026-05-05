@@ -10,6 +10,7 @@ from opendisplay import (
     DisplayConfig,
     GlobalConfig,
     ManufacturerData,
+    PowerMode,
     PowerOption,
     SystemConfig,
 )
@@ -192,4 +193,29 @@ VALID_SERVICE_INFO = make_service_info()
 NOT_OPENDISPLAY_SERVICE_INFO = make_service_info(
     name="Other Device",
     manufacturer_data={0x1234: b"\x00\x01"},
+)
+
+
+# A second device-config variant used for tests that exercise the
+# offline-upload queue: it advertises itself as battery-powered with a
+# configured deep-sleep cycle, so the integration enables queueing.
+DEEP_SLEEP_DEVICE_CONFIG = GlobalConfig(
+    system=DEVICE_CONFIG.system,
+    manufacturer=DEVICE_CONFIG.manufacturer,
+    power=PowerOption(
+        power_mode=PowerMode.BATTERY.value,
+        battery_capacity_mah=b"\x00" * 3,
+        sleep_timeout_ms=5000,
+        tx_power=0,
+        sleep_flags=0,
+        battery_sense_pin=0xFF,
+        battery_sense_enable_pin=0xFF,
+        battery_sense_flags=0,
+        capacity_estimator=0,
+        voltage_scaling_factor=0,
+        deep_sleep_current_ua=0,
+        deep_sleep_time_seconds=60,
+        reserved=b"\x00" * 12,
+    ),
+    displays=DEVICE_CONFIG.displays,
 )

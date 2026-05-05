@@ -80,6 +80,11 @@
       'minor': 2,
       'sha': 'abc123',
     }),
+    'is_deep_sleep': False,
     'is_flex': True,
+    'pending_upload': dict({
+      'age_seconds': None,
+      'queued': False,
+    }),
   })
 # ---

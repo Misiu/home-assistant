@@ -22,6 +22,18 @@ from tests.common import MockConfigEntry
 from tests.components.bluetooth import generate_ble_device
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Register custom pytest markers used by the OpenDisplay test suite."""
+    config.addinivalue_line(
+        "markers",
+        (
+            "deep_sleep_device: configure the mocked OpenDisplay device as"
+            " a battery-powered deep-sleep device so the upload queue is"
+            " activated"
+        ),
+    )
+
+
 @pytest.fixture(autouse=True)
 def mock_bluetooth(enable_bluetooth: None) -> None:
     """Auto mock bluetooth."""
@@ -41,7 +53,7 @@ def mock_ble_device() -> Generator[None]:
             return_value=ble_device,
         ),
         patch(
-            "homeassistant.components.opendisplay.services.async_ble_device_from_address",
+            "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
             return_value=ble_device,
         ),
     ):
@@ -61,7 +73,7 @@ def mock_opendisplay_device_class() -> Generator[MagicMock]:
             new=mock_class,
         ),
         patch(
-            "homeassistant.components.opendisplay.services.OpenDisplayDevice",
+            "homeassistant.components.opendisplay.uploader.OpenDisplayDevice",
             new=mock_class,
         ),
     ):

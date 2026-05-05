@@ -1,8 +1,7 @@
 """Integration for OpenDisplay BLE e-paper displays."""
 
-import asyncio
-import contextlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from opendisplay import (
@@ -13,23 +12,32 @@ from opendisplay import (
     GlobalConfig,
     OpenDisplayDevice,
     OpenDisplayError,
+    PowerMode,
 )
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
 if TYPE_CHECKING:
     from opendisplay.models import FirmwareVersion
 
-from .const import CONF_ENCRYPTION_KEY, DOMAIN
+from .const import (
+    CONF_ENCRYPTION_KEY,
+    DOMAIN,
+    PENDING_UPLOAD_CLEANUP_INTERVAL,
+    PENDING_UPLOAD_TIMEOUT,
+)
 from .coordinator import OpenDisplayCoordinator
+from .queue import OpenDisplayQueue
 from .services import async_setup_services
+from .uploader import OpenDisplayUploader
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -45,10 +53,29 @@ class OpenDisplayRuntimeData:
     firmware: FirmwareVersion
     device_config: GlobalConfig
     is_flex: bool
-    upload_task: asyncio.Task | None = None
+    is_deep_sleep: bool
+    queue: OpenDisplayQueue = field(
+        default_factory=lambda: OpenDisplayQueue(PENDING_UPLOAD_TIMEOUT)
+    )
+    uploader: OpenDisplayUploader | None = None
 
 
 type OpenDisplayConfigEntry = ConfigEntry[OpenDisplayRuntimeData]
+
+
+def _is_deep_sleep_device(device_config: GlobalConfig) -> bool:
+    """Return whether the device is configured to deep-sleep between updates.
+
+    USB-powered devices (e.g. an always-on nRF52840 board) and battery
+    devices that have no sleep timeout configured stay reachable, so the
+    pending-upload queue is unnecessary for them. The queue only kicks in
+    when the device tells us — via its own configuration — that it will
+    actually deep-sleep.
+    """
+    power = device_config.power
+    if power.power_mode_enum == PowerMode.USB:
+        return False
+    return power.sleep_timeout_ms > 0 or power.deep_sleep_time_seconds > 0
 
 
 def _get_encryption_key(entry: OpenDisplayConfigEntry) -> bytes | None:
@@ -138,17 +165,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: OpenDisplayConfigEntry) 
         else None,
     )
 
-    entry.runtime_data = OpenDisplayRuntimeData(
+    runtime_data = OpenDisplayRuntimeData(
         coordinator=coordinator,
         firmware=fw,
         device_config=device_config,
         is_flex=is_flex,
+        is_deep_sleep=_is_deep_sleep_device(device_config),
     )
+    uploader = OpenDisplayUploader(
+        hass,
+        entry,
+        coordinator,
+        runtime_data.queue,
+        is_deep_sleep=runtime_data.is_deep_sleep,
+    )
+    runtime_data.uploader = uploader
+    entry.runtime_data = runtime_data
+
+    # Only deep-sleep devices need the advertisement-driven queue dispatch.
+    if runtime_data.is_deep_sleep:
+        coordinator.async_set_advertisement_callback(
+            uploader.async_handle_advertisement
+        )
 
     await hass.config_entries.async_forward_entry_setups(
         entry, _FLEX_PLATFORMS if is_flex else _BASE_PLATFORMS
     )
     entry.async_on_unload(coordinator.async_start())
+
+    @callback
+    def _purge_pending(_now: datetime) -> None:
+        uploader.async_purge_expired()
+
+    if runtime_data.is_deep_sleep:
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass,
+                _purge_pending,
+                PENDING_UPLOAD_CLEANUP_INTERVAL,
+                name=f"opendisplay-purge-{address}",
+                cancel_on_shutdown=True,
+            )
+        )
+
+        @callback
+        def _clear_advertisement_callback() -> None:
+            coordinator.async_set_advertisement_callback(None)
+
+        entry.async_on_unload(_clear_advertisement_callback)
 
     return True
 
@@ -157,10 +221,8 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: OpenDisplayConfigEntry
 ) -> bool:
     """Unload a config entry."""
-    if (task := entry.runtime_data.upload_task) and not task.done():
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+    if (uploader := entry.runtime_data.uploader) is not None:
+        await uploader.async_shutdown()
 
     return await hass.config_entries.async_unload_platforms(
         entry, _FLEX_PLATFORMS if entry.runtime_data.is_flex else _BASE_PLATFORMS

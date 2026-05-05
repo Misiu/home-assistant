@@ -1,28 +1,16 @@
 """Service registration for the OpenDisplay integration."""
 
-import asyncio
 from collections.abc import Callable
-import contextlib
 from datetime import timedelta
 from enum import IntEnum
 import io
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
-from opendisplay import (
-    AuthenticationFailedError,
-    AuthenticationRequiredError,
-    DitherMode,
-    FitMode,
-    OpenDisplayDevice,
-    OpenDisplayError,
-    RefreshMode,
-    Rotation,
-)
+from opendisplay import DitherMode, FitMode, RefreshMode, Rotation
 from PIL import Image as PILImage, ImageOps
 import voluptuous as vol
 
-from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.http.auth import async_sign_path
 from homeassistant.components.media_source import async_resolve_media
 from homeassistant.config_entries import ConfigEntryState
@@ -38,7 +26,7 @@ from homeassistant.helpers.selector import MediaSelector, MediaSelectorConfig
 if TYPE_CHECKING:
     from . import OpenDisplayConfigEntry
 
-from .const import CONF_ENCRYPTION_KEY, DOMAIN
+from .const import DOMAIN
 
 ATTR_IMAGE = "image"
 ATTR_ROTATION = "rotation"
@@ -151,10 +139,15 @@ async def _async_download_image(hass: HomeAssistant, url: str) -> PILImage.Image
 
 
 async def _async_upload_image(call: ServiceCall) -> None:
-    """Handle the upload_image service call."""
+    """Handle the upload_image service call.
+
+    The image is decoded eagerly here so the (possibly signed, short-lived)
+    media URL never outlives the service call. The decoded image is then
+    handed to the per-entry uploader, which either uploads it immediately
+    when the device is awake, or queues it for the next advertisement when
+    the device is in deep sleep.
+    """
     entry = _get_entry_for_device(call)
-    address = entry.unique_id
-    assert address is not None
 
     image_data: dict[str, Any] = call.data[ATTR_IMAGE]
     rotation: Rotation = call.data[ATTR_ROTATION]
@@ -166,75 +159,24 @@ async def _async_upload_image(call: ServiceCall) -> None:
         tone_compression_pct / 100.0 if tone_compression_pct is not None else "auto"
     )
 
-    ble_device = async_ble_device_from_address(call.hass, address, connectable=True)
-    if ble_device is None:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="device_not_found",
-            translation_placeholders={"address": address},
-        )
+    media = await async_resolve_media(call.hass, image_data["media_content_id"], None)
 
-    current = asyncio.current_task()
-    if (prev := entry.runtime_data.upload_task) is not None and not prev.done():
-        prev.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await prev
-    entry.runtime_data.upload_task = current
+    if media.path is not None:
+        pil_image = await call.hass.async_add_executor_job(_load_image, str(media.path))
+    else:
+        pil_image = await _async_download_image(call.hass, media.url)
 
-    try:
-        media = await async_resolve_media(
-            call.hass, image_data["media_content_id"], None
-        )
+    upload_params: dict[str, Any] = {
+        "refresh_mode": refresh_mode,
+        "dither_mode": dither_mode,
+        "tone_compression": tone_compression,
+        "fit": fit_mode,
+        "rotate": rotation,
+    }
 
-        if media.path is not None:
-            pil_image = await call.hass.async_add_executor_job(
-                _load_image, str(media.path)
-            )
-        else:
-            pil_image = await _async_download_image(call.hass, media.url)
-
-        raw_key = entry.data.get(CONF_ENCRYPTION_KEY)
-        if raw_key is not None and len(raw_key) != 32:
-            entry.async_start_reauth(call.hass)
-            raise HomeAssistantError(
-                translation_domain=DOMAIN, translation_key="authentication_error"
-            )
-        try:
-            encryption_key = bytes.fromhex(raw_key) if raw_key is not None else None
-        except ValueError as err:
-            entry.async_start_reauth(call.hass)
-            raise HomeAssistantError(
-                translation_domain=DOMAIN, translation_key="authentication_error"
-            ) from err
-
-        async with OpenDisplayDevice(
-            mac_address=address,
-            ble_device=ble_device,
-            config=entry.runtime_data.device_config,
-            encryption_key=encryption_key,
-        ) as device:
-            await device.upload_image(
-                pil_image,
-                refresh_mode=refresh_mode,
-                dither_mode=dither_mode,
-                tone_compression=tone_compression,
-                fit=fit_mode,
-                rotate=rotation,
-            )
-    except asyncio.CancelledError:
-        return
-    except (AuthenticationFailedError, AuthenticationRequiredError) as err:
-        entry.async_start_reauth(call.hass)
-        raise HomeAssistantError(
-            translation_domain=DOMAIN, translation_key="authentication_error"
-        ) from err
-    except OpenDisplayError as err:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN, translation_key="upload_error"
-        ) from err
-    finally:
-        if entry.runtime_data.upload_task is current:
-            entry.runtime_data.upload_task = None
+    uploader = entry.runtime_data.uploader
+    assert uploader is not None
+    await uploader.async_enqueue(pil_image, upload_params)
 
 
 @callback

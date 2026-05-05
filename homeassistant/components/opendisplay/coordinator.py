@@ -1,5 +1,6 @@
 """Passive BLE coordinator for OpenDisplay devices."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 import logging
 
@@ -42,6 +43,18 @@ class OpenDisplayCoordinator(PassiveBluetoothDataUpdateCoordinator):
         )
         self.data: OpenDisplayUpdate | None = None
         self._tracker: AdvertisementTracker = AdvertisementTracker()
+        self._advertisement_callback: Callable[[], None] | None = None
+
+    @callback
+    def async_set_advertisement_callback(
+        self, callback_fn: Callable[[], None] | None
+    ) -> None:
+        """Register a callback to be invoked on every received advertisement.
+
+        Used by the uploader to flush queued images for deep-sleep devices.
+        Pass ``None`` to unregister.
+        """
+        self._advertisement_callback = callback_fn
 
     @callback
     def _async_handle_unavailable(
@@ -86,3 +99,6 @@ class OpenDisplayCoordinator(PassiveBluetoothDataUpdateCoordinator):
             )
 
         super()._async_handle_bluetooth_event(service_info, change)
+
+        if self._advertisement_callback is not None:
+            self._advertisement_callback()
