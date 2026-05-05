@@ -258,16 +258,21 @@ class OpenDisplayUploader:
 
             current = asyncio.current_task()
             self._upload_task = current
+            failed = False
             try:
                 await self._async_perform_upload(entry.image, entry.params)
             except HomeAssistantError as err:
+                failed = True
                 self._handle_dispatch_failure(entry, err)
             finally:
                 if self._upload_task is current:
                     self._upload_task = None
 
         # If a newer image was queued while we were uploading, flush it too.
-        if self.queue.has_pending and not self._shutdown:
+        # After a transient failure the same entry is restored to the queue;
+        # don't immediately retry — wait for the next advertisement so we
+        # don't tight-loop while the device is unreachable.
+        if not failed and self.queue.has_pending and not self._shutdown:
             self._schedule_dispatch()
 
     def _handle_dispatch_failure(
