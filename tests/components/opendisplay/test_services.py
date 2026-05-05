@@ -703,7 +703,10 @@ async def test_queued_upload_transient_error_retains_entry(
         )
 
     mock_opendisplay_device.__aenter__.side_effect = BLEConnectionError("flaky")
-    inject_bluetooth_service_info(hass, make_v1_service_info())
+    # Distinct payloads are required so the bluetooth manager does not dedup
+    # the two advertisements (a real deep-sleep device increments its loop
+    # counter on every broadcast).
+    inject_bluetooth_service_info(hass, make_v1_service_info(b"\x00" * 11))
     await hass.async_block_till_done()
 
     pending = mock_config_entry.runtime_data.queue.pending
@@ -713,7 +716,7 @@ async def test_queued_upload_transient_error_retains_entry(
     # Recover and try again — entry must flush.
     mock_opendisplay_device.__aenter__.side_effect = None
     mock_opendisplay_device.__aenter__.return_value = mock_opendisplay_device
-    inject_bluetooth_service_info(hass, make_v1_service_info())
+    inject_bluetooth_service_info(hass, make_v1_service_info(b"\x01" + b"\x00" * 10))
     await hass.async_block_till_done()
 
     mock_opendisplay_device.upload_image.assert_called_once()
