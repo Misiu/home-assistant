@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import aiohttp
+from freezegun.api import FrozenDateTimeFactory
 from opendisplay import (
     AuthenticationFailedError,
     AuthenticationRequiredError,
@@ -595,7 +596,7 @@ async def test_queued_upload_expires_after_timeout(
     mock_config_entry: MockConfigEntry,
     mock_upload_device: MagicMock,
     mock_resolve_media: MagicMock,
-    freezer,
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """Queued image is dropped after PENDING_UPLOAD_TIMEOUT and not uploaded."""
     device_id = _device_id(hass, mock_config_entry)
