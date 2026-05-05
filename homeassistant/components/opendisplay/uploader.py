@@ -72,7 +72,7 @@ class OpenDisplayUploader:
         self.queue = queue
         self.is_deep_sleep = is_deep_sleep
         self._lock = asyncio.Lock()
-        self._upload_task: asyncio.Task[None] | None = None
+        self._upload_task: asyncio.Task[Any] | None = None
         self._shutdown = False
 
     @property
@@ -214,10 +214,10 @@ class OpenDisplayUploader:
         """Schedule a background dispatch attempt."""
         if self._shutdown:
             return
-        self.entry.async_create_background_task(
+        self.entry.async_create_task(
             self.hass,
             self._async_dispatch_pending(),
-            f"opendisplay-dispatch-{self.address}",
+            name=f"opendisplay-dispatch-{self.address}",
             eager_start=True,
         )
 
@@ -227,12 +227,11 @@ class OpenDisplayUploader:
             return
 
         # Drop expired entries opportunistically.
-        if (expired := self.queue.purge_expired()) is not None:
+        if self.queue.purge_expired() is not None:
             _LOGGER.info(
                 "Dropping queued image for OpenDisplay device %s (older than timeout)",
                 self.address,
             )
-            del expired
             return
 
         if not self._device_connectable():
@@ -243,7 +242,7 @@ class OpenDisplayUploader:
             # Re-check inside the lock — another task may have flushed it.
             if self._shutdown or not self.queue.has_pending:
                 return
-            if (expired := self.queue.purge_expired()) is not None:
+            if self.queue.purge_expired() is not None:
                 _LOGGER.info(
                     (
                         "Dropping queued image for OpenDisplay device %s"
@@ -251,7 +250,6 @@ class OpenDisplayUploader:
                     ),
                     self.address,
                 )
-                del expired
                 return
 
             entry = self.queue.take_pending()
@@ -317,12 +315,11 @@ class OpenDisplayUploader:
 
     def async_purge_expired(self) -> None:
         """Periodic callback: drop the pending entry if it has expired."""
-        if (expired := self.queue.purge_expired()) is not None:
+        if self.queue.purge_expired() is not None:
             _LOGGER.info(
                 "Dropping queued image for OpenDisplay device %s (older than timeout)",
                 self.address,
             )
-            del expired
 
     async def async_shutdown(self) -> None:
         """Cancel any in-flight upload and drop the queue."""
