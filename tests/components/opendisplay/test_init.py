@@ -17,7 +17,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from . import ENCRYPTION_KEY
+from . import DEEP_SLEEP_DEVICE_CONFIG, DEVICE_CONFIG, ENCRYPTION_KEY
 
 from tests.common import MockConfigEntry
 
@@ -158,7 +158,9 @@ async def test_unload_cancels_active_upload_task(
     await hass.async_block_till_done()
 
     task = hass.async_create_task(asyncio.sleep(3600))
-    mock_config_entry.runtime_data.upload_task = task
+    uploader = mock_config_entry.runtime_data.uploader
+    assert uploader is not None
+    uploader._upload_task = task
 
     assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -206,3 +208,27 @@ async def test_setup_invalid_encryption_key_format(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.SETUP_ERROR
+
+
+@pytest.mark.parametrize(
+    ("device_config", "expected_deep_sleep"),
+    [
+        (DEVICE_CONFIG, False),
+        (DEEP_SLEEP_DEVICE_CONFIG, True),
+    ],
+)
+async def test_setup_detects_deep_sleep_capability(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    device_config: object,
+    expected_deep_sleep: bool,
+) -> None:
+    """Setup picks up deep-sleep capability from the device's power config."""
+    mock_opendisplay_device.config = device_config
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert mock_config_entry.runtime_data.is_deep_sleep is expected_deep_sleep

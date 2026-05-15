@@ -2,11 +2,13 @@
 
 import asyncio
 from collections.abc import Generator
+from datetime import timedelta
 import io
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import aiohttp
+from freezegun.api import FrozenDateTimeFactory
 from opendisplay import (
     AuthenticationFailedError,
     AuthenticationRequiredError,
@@ -17,20 +19,37 @@ import pytest
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.components.opendisplay.const import CONF_ENCRYPTION_KEY, DOMAIN
+from homeassistant.components.opendisplay.const import (
+    CONF_ENCRYPTION_KEY,
+    DOMAIN,
+    PENDING_UPLOAD_CLEANUP_INTERVAL,
+    PENDING_UPLOAD_TIMEOUT,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 
-from . import ENCRYPTION_KEY
+from . import DEEP_SLEEP_DEVICE_CONFIG, ENCRYPTION_KEY, make_v1_service_info
 
-from tests.common import MockConfigEntry
+from tests.common import MockConfigEntry, async_fire_time_changed
+from tests.components.bluetooth import inject_bluetooth_service_info
 from tests.test_util.aiohttp import AiohttpClientMocker
 
 
 @pytest.fixture(autouse=True)
-async def setup_entry(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:
-    """Set up the config entry for service tests."""
+async def setup_entry(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    request: pytest.FixtureRequest,
+) -> None:
+    """Set up the config entry for service tests.
+
+    Tests marked with ``@pytest.mark.deep_sleep_device`` get a battery
+    device config so the integration enables the offline-upload queue.
+    """
+    if request.node.get_closest_marker("deep_sleep_device"):
+        mock_opendisplay_device.config = DEEP_SLEEP_DEVICE_CONFIG
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
@@ -147,16 +166,17 @@ async def test_upload_image_invalid_device_id(
         )
 
 
-async def test_upload_image_device_not_in_range(
+async def test_upload_image_device_not_in_range_raises_for_always_on(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
+    mock_resolve_media: MagicMock,
 ) -> None:
-    """Test that HomeAssistantError is raised if device is out of BLE range."""
+    """An always-on device that is out of BLE range surfaces an error."""
     device_id = _device_id(hass, mock_config_entry)
 
     with (
         patch(
-            "homeassistant.components.opendisplay.services.async_ble_device_from_address",
+            "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
             return_value=None,
         ),
         pytest.raises(HomeAssistantError),
@@ -173,6 +193,37 @@ async def test_upload_image_device_not_in_range(
             },
             blocking=True,
         )
+
+
+@pytest.mark.deep_sleep_device
+async def test_upload_image_device_not_in_range_queues_for_deep_sleep(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """A deep-sleep device that is out of range queues the image silently."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    mock_upload_device.upload_image.assert_not_called()
+    assert mock_config_entry.runtime_data.queue.has_pending
 
 
 async def test_upload_image_ble_error(
@@ -268,18 +319,48 @@ async def test_upload_image_invalid_mode(
         )
 
 
-async def test_upload_image_cancels_previous_task(
+@pytest.mark.deep_sleep_device
+async def test_upload_image_queues_when_busy(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     mock_upload_device: MagicMock,
     mock_resolve_media: MagicMock,
 ) -> None:
-    """Test that starting a new upload cancels an in-progress upload task."""
+    """Test that a new upload while another is in flight is queued, not cancelled.
+
+    Interrupting a BLE transfer mid-frame can leave the e-paper panel in a
+    partially-written state, so the in-flight upload must complete before the
+    new image is sent.
+    """
     device_id = _device_id(hass, mock_config_entry)
 
-    prev_task = hass.async_create_task(asyncio.sleep(3600))
-    mock_config_entry.runtime_data.upload_task = prev_task
+    first_upload_started = asyncio.Event()
+    release_first_upload = asyncio.Event()
 
+    async def _slow_upload(*_args: object, **_kwargs: object) -> None:
+        first_upload_started.set()
+        await release_first_upload.wait()
+
+    mock_upload_device.upload_image.side_effect = _slow_upload
+
+    first_call = hass.async_create_task(
+        hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+    )
+    await first_upload_started.wait()
+
+    # Second call arrives while the first is still uploading. The queue
+    # should hold it without cancelling the first upload.
     await hass.services.async_call(
         DOMAIN,
         "upload_image",
@@ -292,9 +373,18 @@ async def test_upload_image_cancels_previous_task(
         },
         blocking=True,
     )
+    assert mock_config_entry.runtime_data.queue.has_pending
+    assert not first_call.done()
+
+    # Allow the first upload to complete; the queued image should then be
+    # uploaded automatically.
+    mock_upload_device.upload_image.side_effect = None
+    release_first_upload.set()
+    await first_call
     await hass.async_block_till_done()
 
-    assert prev_task.cancelled()
+    assert mock_upload_device.upload_image.call_count == 2
+    assert not mock_config_entry.runtime_data.queue.has_pending
 
 
 async def test_upload_image_with_encryption_key(
@@ -394,3 +484,275 @@ async def test_upload_image_invalid_encryption_key_format(
 
     flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     assert any(f["context"]["source"] == config_entries.SOURCE_REAUTH for f in flows)
+
+
+@pytest.mark.deep_sleep_device
+async def test_upload_queued_when_offline_then_flushed_on_advertisement(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """Image is queued when device is asleep and uploaded on next advertisement."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    mock_upload_device.upload_image.assert_not_called()
+    assert mock_config_entry.runtime_data.queue.has_pending
+
+    # Device wakes up and starts advertising.
+    inject_bluetooth_service_info(hass, make_v1_service_info())
+    await hass.async_block_till_done()
+
+    mock_upload_device.upload_image.assert_called_once()
+    assert not mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_upload_offline_replaces_pending_image(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A second offline upload replaces the first queued image (latest wins)."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    images: list[PILImage.Image] = []
+
+    def _make_image(_path: str) -> PILImage.Image:
+        img = PILImage.new("RGB", (1, 1))
+        images.append(img)
+        return img
+
+    fake_path = tmp_path / "a.png"
+    fake_path.touch()
+
+    with (
+        patch(
+            "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+            return_value=None,
+        ),
+        patch(
+            "homeassistant.components.opendisplay.services._load_image",
+            side_effect=_make_image,
+        ),
+        patch(
+            "homeassistant.components.opendisplay.services.async_resolve_media",
+            return_value=MagicMock(path=fake_path),
+        ),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/a.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/b.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    assert len(images) == 2
+    pending = mock_config_entry.runtime_data.queue.pending
+    assert pending is not None
+    assert pending.image is images[1]
+    mock_upload_device.upload_image.assert_not_called()
+
+
+@pytest.mark.deep_sleep_device
+async def test_queued_upload_expires_after_timeout(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Queued image is dropped after PENDING_UPLOAD_TIMEOUT and not uploaded."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    assert mock_config_entry.runtime_data.queue.has_pending
+
+    # Advance past the timeout, then fire the periodic purge.
+    freezer.tick(PENDING_UPLOAD_TIMEOUT + timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    # Ensure the periodic interval task actually runs by ticking forward by
+    # one cleanup interval too.
+    freezer.tick(PENDING_UPLOAD_CLEANUP_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert not mock_config_entry.runtime_data.queue.has_pending
+
+    # A late advertisement must NOT cause the dropped image to be uploaded.
+    inject_bluetooth_service_info(hass, make_v1_service_info())
+    await hass.async_block_till_done()
+    mock_upload_device.upload_image.assert_not_called()
+
+
+@pytest.mark.deep_sleep_device
+async def test_queued_upload_auth_error_dropped_and_reauth(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """Auth error during a queued dispatch drops the entry and starts reauth."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    mock_opendisplay_device.__aenter__.side_effect = AuthenticationFailedError("bad")
+
+    inject_bluetooth_service_info(hass, make_v1_service_info())
+    await hass.async_block_till_done()
+
+    assert not mock_config_entry.runtime_data.queue.has_pending
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert any(f["context"]["source"] == config_entries.SOURCE_REAUTH for f in flows)
+
+
+@pytest.mark.deep_sleep_device
+async def test_queued_upload_transient_error_retains_entry(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """A transient BLE error keeps the queued entry for the next advertisement."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    mock_opendisplay_device.__aenter__.side_effect = BLEConnectionError("flaky")
+    # Distinct payloads are required so the bluetooth manager does not dedup
+    # the two advertisements (a real deep-sleep device increments its loop
+    # counter on every broadcast).
+    inject_bluetooth_service_info(hass, make_v1_service_info(b"\x00" * 11))
+    await hass.async_block_till_done()
+
+    pending = mock_config_entry.runtime_data.queue.pending
+    assert pending is not None
+    assert pending.failure_count == 1
+
+    # Recover and try again — entry must flush.
+    mock_opendisplay_device.__aenter__.side_effect = None
+    mock_opendisplay_device.__aenter__.return_value = mock_opendisplay_device
+    inject_bluetooth_service_info(hass, make_v1_service_info(b"\x01" + b"\x00" * 10))
+    await hass.async_block_till_done()
+
+    mock_opendisplay_device.upload_image.assert_called_once()
+    assert not mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_unload_clears_queue(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """Unloading the entry drops any queued image and shuts the uploader down."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    queue = mock_config_entry.runtime_data.queue
+    assert queue.has_pending
+
+    assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert not queue.has_pending

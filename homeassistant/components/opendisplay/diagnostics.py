@@ -5,6 +5,7 @@ from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from . import OpenDisplayConfigEntry
 
@@ -29,6 +30,19 @@ async def async_get_config_entry_diagnostics(
     runtime = entry.runtime_data
     fw = runtime.firmware
 
+    pending = runtime.queue.pending
+    pending_upload: dict[str, Any] = {"queued": pending is not None}
+    if pending is not None:
+        # Only expose age in seconds — never the image bytes or the (signed)
+        # source URL: the queue stores already-decoded PIL images for exactly
+        # that reason, but be defensive in case that ever changes.
+        pending_upload["age_seconds"] = int(
+            (dt_util.utcnow() - pending.enqueued_at).total_seconds()
+        )
+        pending_upload["failure_count"] = pending.failure_count
+    else:
+        pending_upload["age_seconds"] = None
+
     return {
         "firmware": {
             "major": fw["major"],
@@ -36,5 +50,7 @@ async def async_get_config_entry_diagnostics(
             "sha": fw["sha"],
         },
         "is_flex": runtime.is_flex,
+        "is_deep_sleep": runtime.is_deep_sleep,
         "device_config": async_redact_data(_asdict(runtime.device_config), TO_REDACT),
+        "pending_upload": pending_upload,
     }

@@ -118,7 +118,7 @@
   },
   "services": {
     "upload_image": {
-      "description": "Uploads an image to an OpenDisplay device.",
+      "description": "Uploads an image to an OpenDisplay device. If the device is currently in deep sleep the image is held for up to 30 minutes and uploaded the next time the device advertises; if a newer image arrives in the meantime, it replaces the queued one.",
       "fields": {
         "device_id": {
           "description": "The OpenDisplay device to upload the image to.",
