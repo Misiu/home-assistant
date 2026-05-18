@@ -159,7 +159,6 @@ async def test_unload_cancels_active_upload_task(
 
     task = hass.async_create_task(asyncio.sleep(3600))
     uploader = mock_config_entry.runtime_data.uploader
-    assert uploader is not None
     uploader._upload_task = task
 
     assert await hass.config_entries.async_unload(mock_config_entry.entry_id)

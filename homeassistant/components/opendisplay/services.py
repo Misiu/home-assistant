@@ -174,9 +174,7 @@ async def _async_upload_image(call: ServiceCall) -> None:
         "rotate": rotation,
     }
 
-    uploader = entry.runtime_data.uploader
-    assert uploader is not None
-    await uploader.async_enqueue(pil_image, upload_params)
+    await entry.runtime_data.uploader.async_enqueue(pil_image, upload_params)
 
 
 @callback

@@ -13,6 +13,7 @@ from opendisplay import (
     AuthenticationFailedError,
     AuthenticationRequiredError,
     BLEConnectionError,
+    OpenDisplayError,
 )
 from PIL import Image as PILImage
 import pytest
@@ -224,6 +225,74 @@ async def test_upload_image_device_not_in_range_queues_for_deep_sleep(
 
     mock_upload_device.upload_image.assert_not_called()
     assert mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_upload_image_stale_connectable_failure_queues_for_deep_sleep(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """A stale connectable BLE cache queues the image for a deep-sleep device."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    mock_opendisplay_device.__aenter__.side_effect = BLEConnectionError("asleep")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "upload_image",
+        {
+            "device_id": device_id,
+            "image": {
+                "media_content_id": "media-source://local/test.png",
+                "media_content_type": "image/png",
+            },
+        },
+        blocking=True,
+    )
+
+    mock_upload_device.upload_image.assert_not_called()
+    assert mock_config_entry.runtime_data.queue.has_pending
+
+    mock_opendisplay_device.__aenter__.side_effect = None
+    mock_opendisplay_device.__aenter__.return_value = mock_opendisplay_device
+
+    inject_bluetooth_service_info(hass, make_v1_service_info())
+    await hass.async_block_till_done()
+
+    mock_upload_device.upload_image.assert_called_once()
+    assert not mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_upload_image_non_transient_error_raises_for_deep_sleep(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """A non-transient upload error is not hidden by the deep-sleep queue."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    mock_opendisplay_device.__aenter__.side_effect = OpenDisplayError("bad image")
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    assert not mock_config_entry.runtime_data.queue.has_pending
 
 
 async def test_upload_image_ble_error(
@@ -591,6 +660,129 @@ async def test_upload_offline_replaces_pending_image(
 
 
 @pytest.mark.deep_sleep_device
+async def test_upload_image_immediate_upload_replaces_existing_pending_image(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """An immediate upload drops an older queued image."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/a.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    assert mock_config_entry.runtime_data.queue.has_pending
+
+    await hass.services.async_call(
+        DOMAIN,
+        "upload_image",
+        {
+            "device_id": device_id,
+            "image": {
+                "media_content_id": "media-source://local/b.png",
+                "media_content_type": "image/png",
+            },
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    mock_upload_device.upload_image.assert_called_once()
+    assert not mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_upload_image_immediate_failure_keeps_newer_pending_image(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A failed immediate upload does not overwrite a newer queued image."""
+    device_id = _device_id(hass, mock_config_entry)
+    upload_started = asyncio.Event()
+    fail_upload = asyncio.Event()
+    images: list[PILImage.Image] = []
+
+    def _make_image(_path: str) -> PILImage.Image:
+        image = PILImage.new("RGB", (1, 1))
+        images.append(image)
+        return image
+
+    async def _failing_upload(*_args: object, **_kwargs: object) -> None:
+        upload_started.set()
+        await fail_upload.wait()
+        raise BLEConnectionError("flaky")
+
+    fake_path = tmp_path / "test.png"
+    fake_path.touch()
+    mock_upload_device.upload_image.side_effect = _failing_upload
+
+    with (
+        patch(
+            "homeassistant.components.opendisplay.services._load_image",
+            side_effect=_make_image,
+        ),
+        patch(
+            "homeassistant.components.opendisplay.services.async_resolve_media",
+            return_value=MagicMock(path=fake_path),
+        ),
+    ):
+        first_call = hass.async_create_task(
+            hass.services.async_call(
+                DOMAIN,
+                "upload_image",
+                {
+                    "device_id": device_id,
+                    "image": {
+                        "media_content_id": "media-source://local/a.png",
+                        "media_content_type": "image/png",
+                    },
+                },
+                blocking=True,
+            )
+        )
+        await upload_started.wait()
+
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/b.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    fail_upload.set()
+    await first_call
+
+    assert len(images) == 2
+    pending = mock_config_entry.runtime_data.queue.pending
+    assert pending is not None
+    assert pending.image is images[1]
+    assert pending.failure_count == 0
+
+
+@pytest.mark.deep_sleep_device
 async def test_queued_upload_expires_after_timeout(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
@@ -721,6 +913,191 @@ async def test_queued_upload_transient_error_retains_entry(
 
     mock_opendisplay_device.upload_image.assert_called_once()
     assert not mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_queued_upload_failure_does_not_replace_newer_pending_image(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A failed in-flight queued upload does not overwrite a newer queued image."""
+    device_id = _device_id(hass, mock_config_entry)
+    upload_started = asyncio.Event()
+    fail_upload = asyncio.Event()
+    images: list[PILImage.Image] = []
+
+    def _make_image(_path: str) -> PILImage.Image:
+        image = PILImage.new("RGB", (1, 1))
+        images.append(image)
+        return image
+
+    async def _failing_upload(*_args: object, **_kwargs: object) -> None:
+        upload_started.set()
+        await fail_upload.wait()
+        raise BLEConnectionError("flaky")
+
+    fake_path = tmp_path / "test.png"
+    fake_path.touch()
+
+    with (
+        patch(
+            "homeassistant.components.opendisplay.services._load_image",
+            side_effect=_make_image,
+        ),
+        patch(
+            "homeassistant.components.opendisplay.services.async_resolve_media",
+            return_value=MagicMock(path=fake_path),
+        ),
+    ):
+        with patch(
+            "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+            return_value=None,
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                "upload_image",
+                {
+                    "device_id": device_id,
+                    "image": {
+                        "media_content_id": "media-source://local/a.png",
+                        "media_content_type": "image/png",
+                    },
+                },
+                blocking=True,
+            )
+
+        mock_upload_device.upload_image.side_effect = _failing_upload
+        inject_bluetooth_service_info(hass, make_v1_service_info(b"\x00" * 11))
+        await upload_started.wait()
+
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/b.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    fail_upload.set()
+    await hass.async_block_till_done()
+
+    assert len(images) == 2
+    pending = mock_config_entry.runtime_data.queue.pending
+    assert pending is not None
+    assert pending.image is images[1]
+    assert pending.failure_count == 0
+
+
+@pytest.mark.deep_sleep_device
+async def test_queued_upload_non_transient_error_drops_entry(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """A non-transient queued upload error drops the queued image."""
+    device_id = _device_id(hass, mock_config_entry)
+
+    with patch(
+        "homeassistant.components.opendisplay.uploader.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    mock_opendisplay_device.__aenter__.side_effect = OpenDisplayError("bad image")
+
+    inject_bluetooth_service_info(hass, make_v1_service_info())
+    await hass.async_block_till_done()
+
+    assert not mock_config_entry.runtime_data.queue.has_pending
+
+
+@pytest.mark.deep_sleep_device
+async def test_queued_upload_transient_error_waits_for_next_advertisement(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """Duplicate dispatch triggers do not immediately retry after a transient error."""
+    device_id = _device_id(hass, mock_config_entry)
+    first_upload_started = asyncio.Event()
+    release_first_upload = asyncio.Event()
+
+    async def _first_upload() -> None:
+        first_upload_started.set()
+        await release_first_upload.wait()
+
+    async def _transient_upload() -> None:
+        raise BLEConnectionError("flaky")
+
+    upload_side_effects = [_first_upload, *([_transient_upload] * 6)]
+
+    async def _upload(*_args: object, **_kwargs: object) -> None:
+        await upload_side_effects.pop(0)()
+
+    mock_upload_device.upload_image.side_effect = _upload
+
+    first_call = hass.async_create_task(
+        hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+    )
+    await first_upload_started.wait()
+
+    await hass.services.async_call(
+        DOMAIN,
+        "upload_image",
+        {
+            "device_id": device_id,
+            "image": {
+                "media_content_id": "media-source://local/test.png",
+                "media_content_type": "image/png",
+            },
+        },
+        blocking=True,
+    )
+
+    uploader = mock_config_entry.runtime_data.uploader
+    uploader.async_handle_advertisement()
+    uploader.async_handle_advertisement()
+
+    release_first_upload.set()
+    await first_call
+    await hass.async_block_till_done()
+
+    pending = mock_config_entry.runtime_data.queue.pending
+    assert pending is not None
+    assert pending.failure_count == 1
+    assert mock_upload_device.upload_image.call_count == 2
 
 
 @pytest.mark.deep_sleep_device

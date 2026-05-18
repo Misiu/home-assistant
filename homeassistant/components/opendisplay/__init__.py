@@ -1,6 +1,6 @@
 """Integration for OpenDisplay BLE e-paper displays."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -54,10 +54,8 @@ class OpenDisplayRuntimeData:
     device_config: GlobalConfig
     is_flex: bool
     is_deep_sleep: bool
-    queue: OpenDisplayQueue = field(
-        default_factory=lambda: OpenDisplayQueue(PENDING_UPLOAD_TIMEOUT)
-    )
-    uploader: OpenDisplayUploader | None = None
+    queue: OpenDisplayQueue
+    uploader: OpenDisplayUploader
 
 
 type OpenDisplayConfigEntry = ConfigEntry[OpenDisplayRuntimeData]
@@ -165,21 +163,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: OpenDisplayConfigEntry) 
         else None,
     )
 
+    is_deep_sleep = _is_deep_sleep_device(device_config)
+    queue = OpenDisplayQueue(PENDING_UPLOAD_TIMEOUT)
+    uploader = OpenDisplayUploader(
+        hass,
+        entry,
+        queue,
+        is_deep_sleep=is_deep_sleep,
+    )
     runtime_data = OpenDisplayRuntimeData(
         coordinator=coordinator,
         firmware=fw,
         device_config=device_config,
         is_flex=is_flex,
-        is_deep_sleep=_is_deep_sleep_device(device_config),
+        is_deep_sleep=is_deep_sleep,
+        queue=queue,
+        uploader=uploader,
     )
-    uploader = OpenDisplayUploader(
-        hass,
-        entry,
-        coordinator,
-        runtime_data.queue,
-        is_deep_sleep=runtime_data.is_deep_sleep,
-    )
-    runtime_data.uploader = uploader
     entry.runtime_data = runtime_data
 
     # Only deep-sleep devices need the advertisement-driven queue dispatch.
@@ -221,8 +221,7 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: OpenDisplayConfigEntry
 ) -> bool:
     """Unload a config entry."""
-    if (uploader := entry.runtime_data.uploader) is not None:
-        await uploader.async_shutdown()
+    await entry.runtime_data.uploader.async_shutdown()
 
     return await hass.config_entries.async_unload_platforms(
         entry, _FLEX_PLATFORMS if entry.runtime_data.is_flex else _BASE_PLATFORMS

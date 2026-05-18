@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 from opendisplay import (
     AuthenticationFailedError,
     AuthenticationRequiredError,
+    BLEConnectionError,
+    BLETimeoutError,
     OpenDisplayDevice,
     OpenDisplayError,
 )
@@ -34,7 +36,6 @@ from .queue import OpenDisplayQueue, PendingUpload
 
 if TYPE_CHECKING:
     from . import OpenDisplayConfigEntry
-    from .coordinator import OpenDisplayCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +54,6 @@ class OpenDisplayUploader:
         self,
         hass: HomeAssistant,
         entry: OpenDisplayConfigEntry,
-        coordinator: OpenDisplayCoordinator,
         queue: OpenDisplayQueue,
         *,
         is_deep_sleep: bool,
@@ -68,11 +68,12 @@ class OpenDisplayUploader:
         """
         self.hass = hass
         self.entry = entry
-        self.coordinator = coordinator
         self.queue = queue
         self.is_deep_sleep = is_deep_sleep
         self._lock = asyncio.Lock()
         self._upload_task: asyncio.Task[Any] | None = None
+        self._dispatch_task: asyncio.Task[Any] | None = None
+        self._defer_dispatch_until_advertisement = False
         self._shutdown = False
 
     @property
@@ -134,6 +135,10 @@ class OpenDisplayUploader:
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="authentication_error"
             ) from err
+        except (BLEConnectionError, BLETimeoutError) as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="ble_error"
+            ) from err
         except OpenDisplayError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="upload_error"
@@ -146,6 +151,37 @@ class OpenDisplayUploader:
             is not None
         )
 
+    @staticmethod
+    def _is_auth_error(err: HomeAssistantError) -> bool:
+        """Return whether an upload error is authentication-related."""
+        return err.translation_key == "authentication_error"
+
+    @staticmethod
+    def _is_transient_error(err: HomeAssistantError) -> bool:
+        """Return whether an upload error can be retried on the next advertisement."""
+        return err.translation_key in ("device_not_found", "ble_error")
+
+    def _queue_upload(self, image: PILImage.Image, params: dict[str, Any]) -> None:
+        """Queue an upload for the next advertisement."""
+        self.queue.set_pending(image, params)
+        _LOGGER.info(
+            "Image queued for OpenDisplay device %s; will upload when ready",
+            self.address,
+        )
+
+    def _keep_newer_pending_upload(self) -> bool:
+        """Return whether a newer pending upload should win over the current one."""
+        if not self.queue.has_pending:
+            return False
+        _LOGGER.info(
+            (
+                "Not restoring failed OpenDisplay upload for device %s because a"
+                " newer image is queued"
+            ),
+            self.address,
+        )
+        return True
+
     async def async_enqueue(
         self, image: PILImage.Image, params: dict[str, Any]
     ) -> None:
@@ -153,9 +189,10 @@ class OpenDisplayUploader:
 
         - Always-on device (``is_deep_sleep=False``) → upload immediately and
           surface any error to the caller; the queue is never used.
-        - Deep-sleep device, connectable, and idle → upload immediately and
-          propagate any ``HomeAssistantError`` exactly like the previous
-          synchronous path.
+        - Deep-sleep device, connectable, and idle → upload immediately.
+          Authentication and non-retryable upload errors still surface to the
+          caller; transient BLE failures queue the image for the next
+          advertisement because the Bluetooth cache can outlive the wake window.
         - Deep-sleep device but an upload is in flight → queue and return;
           the running upload will pick up the new image when it finishes.
         - Deep-sleep device not connectable (asleep or out of range) → queue
@@ -176,16 +213,25 @@ class OpenDisplayUploader:
             return
 
         if not self._lock.locked() and self._device_connectable():
-            await self._run_immediate_upload(image, params)
+            self.queue.clear()
+            try:
+                await self._run_immediate_upload(
+                    image, params, defer_dispatch_on_transient_error=True
+                )
+            except HomeAssistantError as err:
+                if self._is_auth_error(err):
+                    self.queue.clear()
+                    raise
+                if not self._is_transient_error(err):
+                    raise
+                if self._keep_newer_pending_upload():
+                    return
+                self._queue_upload(image, params)
             return
 
         # Either asleep, not connectable, or another upload is running.
         # Replace any existing pending entry — the latest image wins.
-        self.queue.set_pending(image, params)
-        _LOGGER.info(
-            "Image queued for OpenDisplay device %s; will upload when ready",
-            self.address,
-        )
+        self._queue_upload(image, params)
 
         # If an upload is currently running on a connectable device, schedule
         # a dispatch so the queued image is sent as soon as the lock frees.
@@ -193,7 +239,11 @@ class OpenDisplayUploader:
             self._schedule_dispatch()
 
     async def _run_immediate_upload(
-        self, image: PILImage.Image, params: dict[str, Any]
+        self,
+        image: PILImage.Image,
+        params: dict[str, Any],
+        *,
+        defer_dispatch_on_transient_error: bool = False,
     ) -> None:
         """Run a synchronous (caller-awaited) upload while holding the lock."""
         async with self._lock:
@@ -201,6 +251,11 @@ class OpenDisplayUploader:
             self._upload_task = current
             try:
                 await self._async_perform_upload(image, params)
+                self._defer_dispatch_until_advertisement = False
+            except HomeAssistantError as err:
+                if defer_dispatch_on_transient_error and self._is_transient_error(err):
+                    self._defer_dispatch_until_advertisement = True
+                raise
             finally:
                 if self._upload_task is current:
                     self._upload_task = None
@@ -212,18 +267,34 @@ class OpenDisplayUploader:
 
     def _schedule_dispatch(self) -> None:
         """Schedule a background dispatch attempt."""
-        if self._shutdown:
+        if self._shutdown or self._defer_dispatch_until_advertisement:
             return
-        self.entry.async_create_task(
+        if (task := self._dispatch_task) is not None and not task.done():
+            return
+        task = self.entry.async_create_task(
             self.hass,
             self._async_dispatch_pending(),
             name=f"opendisplay-dispatch-{self.address}",
             eager_start=True,
         )
+        self._dispatch_task = task
+        if task.done():
+            self._dispatch_task = None
+            return
+        task.add_done_callback(self._clear_dispatch_task)
+
+    def _clear_dispatch_task(self, task: asyncio.Future[Any]) -> None:
+        """Clear the tracked dispatch task when it finishes."""
+        if self._dispatch_task is task:
+            self._dispatch_task = None
 
     async def _async_dispatch_pending(self) -> None:
         """Try to flush the queued image to the device."""
-        if self._shutdown or not self.queue.has_pending:
+        if (
+            self._shutdown
+            or self._defer_dispatch_until_advertisement
+            or not self.queue.has_pending
+        ):
             return
 
         # Drop expired entries opportunistically.
@@ -240,7 +311,11 @@ class OpenDisplayUploader:
 
         async with self._lock:
             # Re-check inside the lock — another task may have flushed it.
-            if self._shutdown or not self.queue.has_pending:
+            if (
+                self._shutdown
+                or self._defer_dispatch_until_advertisement
+                or not self.queue.has_pending
+            ):
                 return
             if self.queue.purge_expired() is not None:
                 _LOGGER.info(
@@ -273,22 +348,39 @@ class OpenDisplayUploader:
         # don't immediately retry — wait for the next advertisement so we
         # don't tight-loop while the device is unreachable.
         if not failed and self.queue.has_pending and not self._shutdown:
+            if self._dispatch_task is asyncio.current_task():
+                self._dispatch_task = None
             self._schedule_dispatch()
 
     def _handle_dispatch_failure(
         self, entry: PendingUpload, err: HomeAssistantError
     ) -> None:
         """React to an upload failure during a queue dispatch."""
-        cause = err.__cause__
-        if isinstance(cause, (AuthenticationFailedError, AuthenticationRequiredError)):
+        if self._is_auth_error(err):
             # Bad key — retrying would loop forever. Drop the entry; the
             # reauth flow has already been kicked off by _async_perform_upload.
+            # Any newer queued image would use the same bad key, so drop it too.
+            self.queue.clear()
             _LOGGER.warning(
                 (
                     "Authentication failed while uploading queued image to"
                     " OpenDisplay device %s; dropping queued image"
                 ),
                 self.address,
+            )
+            return
+
+        if self._keep_newer_pending_upload():
+            return
+
+        if not self._is_transient_error(err):
+            _LOGGER.warning(
+                (
+                    "Non-retryable error while uploading queued image to"
+                    " OpenDisplay device %s; dropping queued image: %s"
+                ),
+                self.address,
+                err,
             )
             return
 
@@ -306,7 +398,10 @@ class OpenDisplayUploader:
             )
         else:
             _LOGGER.debug(
-                "Failed to upload queued image to OpenDisplay device %s (attempt %d): %s",
+                (
+                    "Failed to upload queued image to OpenDisplay device %s"
+                    " (attempt %d): %s"
+                ),
                 self.address,
                 entry.failure_count,
                 err,
@@ -314,7 +409,12 @@ class OpenDisplayUploader:
 
     def async_handle_advertisement(self) -> None:
         """Coordinator callback: device just advertised — try to flush queue."""
-        if self._shutdown or not self.queue.has_pending:
+        if self._shutdown:
+            return
+        # Reset the defer flag unconditionally so that a future upload that
+        # arrives after the queue has been purged is not blocked.
+        self._defer_dispatch_until_advertisement = False
+        if not self.queue.has_pending:
             return
         self._schedule_dispatch()
 
@@ -330,11 +430,20 @@ class OpenDisplayUploader:
         """Cancel any in-flight upload and drop the queue."""
         self._shutdown = True
         self.queue.clear()
-        if (task := self._upload_task) is not None and not task.done():
+        self._defer_dispatch_until_advertisement = False
+        current_task = asyncio.current_task()
+        tasks = {
+            task
+            for task in (self._upload_task, self._dispatch_task)
+            if task is not None and task is not current_task and not task.done()
+        }
+        for task in tasks:
             task.cancel()
+        for task in tasks:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._upload_task = None
+        self._dispatch_task = None
 
 
 __all__ = ["OpenDisplayUploader", "PendingUpload"]
