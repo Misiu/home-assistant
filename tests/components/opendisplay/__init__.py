@@ -1,7 +1,5 @@
 """Tests for the OpenDisplay integration."""
 
-from time import time
-
 from bleak.backends.scanner import AdvertisementData
 from opendisplay import (
     BinaryInputs,
@@ -19,6 +17,7 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from tests.components.bluetooth import generate_ble_device
 
 OPENDISPLAY_MANUFACTURER_ID = 9286  # 0x2446
+TEST_BLUETOOTH_TIME = 1_720_000_000.0
 
 # V1 advertisement payload (14 bytes):
 # battery_mv=3700, temperature_c=25.0, loop_counter=1
@@ -105,7 +104,7 @@ def make_service_info(
         service_uuids=[],
         source="local",
         connectable=True,
-        time=time(),
+        time=TEST_BLUETOOTH_TIME,
         device=generate_ble_device(address, name=name),
         advertisement=AdvertisementData(
             local_name=name,

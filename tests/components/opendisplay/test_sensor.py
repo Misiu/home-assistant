@@ -2,11 +2,12 @@
 
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 import time
 from unittest.mock import MagicMock
 
-from habluetooth import CONNECTABLE_FALLBACK_MAXIMUM_STALE_ADVERTISEMENT_SECONDS
+from freezegun.api import FrozenDateTimeFactory
+from habluetooth import FALLBACK_MAXIMUM_STALE_ADVERTISEMENT_SECONDS
 from opendisplay import voltage_to_percent
 from opendisplay.models.config import PowerOption
 from opendisplay.models.enums import CapacityEstimator, PowerMode
@@ -58,8 +59,10 @@ async def test_sensor_entities_usb_device(
     entity_registry: er.EntityRegistry,
     snapshot: SnapshotAssertion,
     setup_entry: Callable[[], Awaitable[None]],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """Test sensor entities for a USB-powered Flex device."""
+    freezer.move_to("2026-06-22T08:16:15+00:00")
     await setup_entry()
 
     inject_bluetooth_service_info(hass, VALID_SERVICE_INFO)
@@ -75,8 +78,10 @@ async def test_sensor_entities_battery_device(
     entity_registry: er.EntityRegistry,
     snapshot: SnapshotAssertion,
     setup_entry: Callable[[], Awaitable[None]],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     """Test sensor entities for a battery-powered Flex device with LI_ION chemistry."""
+    freezer.move_to("2026-06-22T08:16:19+00:00")
     device_config = deepcopy(DEVICE_CONFIG)
     power = device_config.power
     device_config.power = PowerOption(
@@ -148,8 +153,11 @@ async def test_coordinator_ignores_unknown_manufacturer(
     inject_bluetooth_service_info(hass, unknown_service_info)
     await hass.async_block_till_done()
 
-    # Coordinator has no data; device is visible but no OpenDisplay data parsed
-    assert hass.states.get("sensor.opendisplay_1234_temperature").state == STATE_UNKNOWN
+    # Coordinator ignores non-OpenDisplay advertisements; device stays unavailable
+    assert (
+        hass.states.get("sensor.opendisplay_1234_temperature").state
+        == STATE_UNAVAILABLE
+    )
 
 
 async def test_sensor_goes_unavailable_when_device_disappears(
@@ -168,12 +176,10 @@ async def test_sensor_goes_unavailable_when_device_disappears(
         != STATE_UNAVAILABLE
     )
 
-    # Must exceed both the connectable stale threshold (195s) and the
+    # Must exceed both the non-connectable stale threshold (900s) and the
     # unavailability polling interval (300s) to trigger the callback.
     advance = (
-        CONNECTABLE_FALLBACK_MAXIMUM_STALE_ADVERTISEMENT_SECONDS
-        + UNAVAILABLE_TRACK_SECONDS
-        + 1
+        FALLBACK_MAXIMUM_STALE_ADVERTISEMENT_SECONDS + UNAVAILABLE_TRACK_SECONDS + 1
     )
     monotonic_now = start_monotonic + advance
     with (
@@ -227,3 +233,80 @@ async def test_battery_sensor_defaults_to_liion_when_capacity_estimator_unset(
     # the same value as explicit LI_ION
     expected = voltage_to_percent(3700, CapacityEstimator.LI_ION)
     assert battery_state.state == str(expected)
+
+
+async def test_deep_sleep_diagnostic_sensors(
+    hass: HomeAssistant,
+    mock_opendisplay_device: MagicMock,
+    setup_entry: Callable[[], Awaitable[None]],
+) -> None:
+    """Deep sleep diagnostic sensors expose expected values."""
+    device_config = deepcopy(DEVICE_CONFIG)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+
+    await setup_entry()
+
+    deep_sleep_time = hass.states.get("sensor.opendisplay_1234_deep_sleep_time")
+    assert deep_sleep_time is not None
+    assert deep_sleep_time.state == "300"
+
+    expected_wakeup = hass.states.get("sensor.opendisplay_1234_expected_wake_up")
+    assert expected_wakeup is not None
+    assert expected_wakeup.state == STATE_UNKNOWN
+
+
+async def test_expected_wakeup_uses_restored_last_seen(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    setup_entry: Callable[[], Awaitable[None]],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Restored last_seen drives expected wakeup when no fresh data is available."""
+    device_config = deepcopy(DEVICE_CONFIG)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+
+    await setup_entry()
+
+    freezer.move_to("2026-06-22T10:02:00+00:00")
+    restored_last_seen = datetime(2026, 6, 22, 10, 0, tzinfo=UTC)
+    mock_config_entry.runtime_data.coordinator.async_restore_last_seen(
+        restored_last_seen
+    )
+    await hass.async_block_till_done()
+
+    expected_wakeup = hass.states.get("sensor.opendisplay_1234_expected_wake_up")
+    assert expected_wakeup is not None
+    assert expected_wakeup.state == "2026-06-22T10:05:00+00:00"

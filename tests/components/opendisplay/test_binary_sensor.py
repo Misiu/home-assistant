@@ -16,6 +16,9 @@ from tests.common import MockConfigEntry, snapshot_platform
 from tests.components.bluetooth import inject_bluetooth_service_info
 
 ENTITY_ID = "binary_sensor.opendisplay_1234_connectivity"
+PENDING_UPLOAD_ENTITY_ID = "binary_sensor.opendisplay_1234_pending_upload"
+
+pytestmark = pytest.mark.usefixtures("entity_registry_enabled_by_default")
 
 
 @pytest.fixture
@@ -66,3 +69,20 @@ async def test_connectivity_changes_state(
     await hass.async_block_till_done()
 
     assert hass.states.get(ENTITY_ID).state == STATE_ON
+
+
+async def test_pending_upload_changes_state(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    setup_entry: Callable[[], Awaitable[None]],
+) -> None:
+    """Pending upload binary sensor reflects coordinator queued state."""
+    await setup_entry()
+
+    assert hass.states.get(PENDING_UPLOAD_ENTITY_ID).state == STATE_OFF
+
+    coordinator = mock_config_entry.runtime_data.coordinator
+    coordinator.async_set_pending_upload(True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(PENDING_UPLOAD_ENTITY_ID).state == STATE_ON

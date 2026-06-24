@@ -1,6 +1,7 @@
 """Integration for OpenDisplay BLE e-paper displays."""
 
 import asyncio
+from collections.abc import Callable
 import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -33,7 +34,8 @@ if TYPE_CHECKING:
 
 from .const import CONF_ENCRYPTION_KEY, DOMAIN
 from .coordinator import OpenDisplayCoordinator
-from .services import async_setup_services
+from .deep_sleep import deep_sleep_seconds, deep_sleep_timeout_margin_minutes
+from .services import async_register_pending_upload_listener, async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -50,6 +52,9 @@ class OpenDisplayRuntimeData:
     device_config: GlobalConfig
     is_flex: bool
     upload_task: asyncio.Task | None = None
+    pending_upload: object | None = None
+    pending_upload_task: asyncio.Task | None = None
+    pending_upload_expiry_unsub: Callable[[], None] | None = None
 
 
 type OpenDisplayConfigEntry = ConfigEntry[OpenDisplayRuntimeData]
@@ -122,7 +127,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: OpenDisplayConfigEntry) 
     if TYPE_CHECKING:
         assert device_config is not None
 
-    coordinator = OpenDisplayCoordinator(hass, address)
+    coordinator = OpenDisplayCoordinator(
+        hass,
+        address,
+        deep_sleep_time_seconds=deep_sleep_seconds(device_config),
+        deep_sleep_timeout_margin_minutes=deep_sleep_timeout_margin_minutes(
+            entry.options
+        ),
+    )
 
     manufacturer = device_config.manufacturer
     display = device_config.displays[0]
@@ -165,6 +177,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: OpenDisplayConfigEntry) 
         entry, FLEX_PLATFORMS if is_flex else BASE_PLATFORMS
     )
     entry.async_on_unload(coordinator.async_start())
+    entry.async_on_unload(async_register_pending_upload_listener(hass, entry))
 
     return True
 
@@ -177,6 +190,17 @@ async def async_unload_entry(
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+
+    if (task := entry.runtime_data.pending_upload_task) and not task.done():
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    entry.runtime_data.pending_upload_task = None
+    entry.runtime_data.pending_upload = None
+    if (unsub := entry.runtime_data.pending_upload_expiry_unsub) is not None:
+        unsub()
+        entry.runtime_data.pending_upload_expiry_unsub = None
 
     return await hass.config_entries.async_unload_platforms(
         entry, FLEX_PLATFORMS if entry.runtime_data.is_flex else BASE_PLATFORMS

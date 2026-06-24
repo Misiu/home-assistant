@@ -51,6 +51,11 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "pending_upload": {
+        "name": "Pending upload"
+      }
+    },
     "event": {
       "button": {
         "name": "Button {number}",
@@ -67,6 +72,15 @@
     "sensor": {
       "battery_voltage": {
         "name": "Battery voltage"
+      },
+      "deep_sleep_time": {
+        "name": "Deep sleep time"
+      },
+      "expected_wakeup": {
+        "name": "Expected wake-up"
+      },
+      "last_seen": {
+        "name": "Last seen"
       }
     }
   },

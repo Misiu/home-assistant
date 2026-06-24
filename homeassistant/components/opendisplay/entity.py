@@ -27,3 +27,8 @@ class OpenDisplayEntity(PassiveBluetoothCoordinatorEntity[OpenDisplayCoordinator
         self._attr_device_info = DeviceInfo(
             connections={(CONNECTION_BLUETOOTH, coordinator.address)},
         )
+
+    @property
+    def available(self) -> bool:
+        """Return availability computed by the coordinator."""
+        return self.coordinator.available

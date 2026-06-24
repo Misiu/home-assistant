@@ -22,6 +22,13 @@ _CONNECTIVITY_DESCRIPTION = BinarySensorEntityDescription(
     entity_category=EntityCategory.DIAGNOSTIC,
 )
 
+_PENDING_UPLOAD_DESCRIPTION = BinarySensorEntityDescription(
+    key="pending_upload",
+    translation_key="pending_upload",
+    entity_category=EntityCategory.DIAGNOSTIC,
+    entity_registry_enabled_default=False,
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -33,7 +40,11 @@ async def async_setup_entry(
         [
             OpenDisplayConnectivityBinarySensor(
                 entry.runtime_data.coordinator, _CONNECTIVITY_DESCRIPTION
-            )
+            ),
+            OpenDisplayPendingUploadBinarySensor(
+                entry.runtime_data.coordinator,
+                _PENDING_UPLOAD_DESCRIPTION,
+            ),
         ]
     )
 
@@ -52,3 +63,17 @@ class OpenDisplayConnectivityBinarySensor(OpenDisplayEntity, BinarySensorEntity)
     def is_on(self) -> bool:
         """Return True if the device is currently reachable via BLE."""
         return self.coordinator.available
+
+
+class OpenDisplayPendingUploadBinarySensor(OpenDisplayEntity, BinarySensorEntity):
+    """Reports if there is a pending upload waiting for device wake-up."""
+
+    @property
+    def available(self) -> bool:
+        """Pending upload state should be visible even while device is sleeping."""
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if an upload is currently queued."""
+        return self.coordinator.pending_upload

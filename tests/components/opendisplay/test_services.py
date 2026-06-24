@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Generator
+from copy import deepcopy
 import io
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -12,6 +13,7 @@ from opendisplay import (
     AuthenticationRequiredError,
     BLEConnectionError,
 )
+from opendisplay.models.config import PowerOption
 from PIL import Image as PILImage
 import pytest
 import voluptuous as vol
@@ -22,9 +24,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 
-from . import ENCRYPTION_KEY
+from . import ENCRYPTION_KEY, VALID_SERVICE_INFO
 
 from tests.common import MockConfigEntry
+from tests.components.bluetooth import inject_bluetooth_service_info
 from tests.test_util.aiohttp import AiohttpClientMocker
 
 
@@ -394,3 +397,112 @@ async def test_upload_image_invalid_encryption_key_format(
 
     flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
     assert any(f["context"]["source"] == config_entries.SOURCE_REAUTH for f in flows)
+
+
+async def test_upload_image_is_queued_when_deep_sleep_device_is_asleep(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """Upload request is queued (not sent immediately) for sleeping deep-sleep devices."""
+    device_config = deepcopy(mock_opendisplay_device.config)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+    mock_config_entry.runtime_data.device_config = device_config
+
+    device_id = _device_id(hass, mock_config_entry)
+    assert not mock_config_entry.runtime_data.coordinator.available
+
+    await hass.services.async_call(
+        DOMAIN,
+        "upload_image",
+        {
+            "device_id": device_id,
+            "image": {
+                "media_content_id": "media-source://local/test.png",
+                "media_content_type": "image/png",
+            },
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert mock_upload_device.upload_image.call_count == 0
+    assert mock_config_entry.runtime_data.pending_upload is not None
+    assert mock_config_entry.runtime_data.coordinator.pending_upload is True
+
+
+async def test_queued_upload_is_flushed_after_device_seen(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_upload_device: MagicMock,
+    mock_resolve_media: MagicMock,
+) -> None:
+    """Queued upload is sent when a new OpenDisplay advertisement is received."""
+    device_config = deepcopy(mock_opendisplay_device.config)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+    mock_config_entry.runtime_data.device_config = device_config
+
+    device_id = _device_id(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "upload_image",
+        {
+            "device_id": device_id,
+            "image": {
+                "media_content_id": "media-source://local/test.png",
+                "media_content_type": "image/png",
+            },
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert mock_config_entry.runtime_data.pending_upload is not None
+    assert mock_upload_device.upload_image.call_count == 0
+
+    with patch(
+        "homeassistant.components.opendisplay.services.asyncio.sleep",
+        return_value=None,
+    ):
+        inject_bluetooth_service_info(hass, VALID_SERVICE_INFO)
+        await hass.async_block_till_done()
+
+    assert mock_upload_device.upload_image.call_count == 1
+    assert mock_config_entry.runtime_data.pending_upload is None
+    assert mock_config_entry.runtime_data.coordinator.pending_upload is False
