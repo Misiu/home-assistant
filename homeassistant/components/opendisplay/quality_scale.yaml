@@ -31,9 +31,7 @@ rules:
   # Silver
   action-exceptions: done
   config-entry-unloading: done
-  docs-configuration-parameters:
-    status: exempt
-    comment: Integration has no options flow.
+  docs-configuration-parameters: done
   docs-installation-parameters: done
   entity-unavailable: done
   integration-owner: done
@@ -80,4 +78,6 @@ rules:
   inject-websession:
     status: exempt
     comment: The opendisplay library communicates over BLE and does not use HTTP.
-  strict-typing: todo
+  strict-typing:
+    status: done
+    comment: Integration typing was tightened across runtime metadata, deep-sleep helpers, service payload parsing, and event state, and validated with mypy/pylint and full integration tests.

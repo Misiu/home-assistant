@@ -11,12 +11,14 @@ from datetime import datetime, timedelta
 >>>>>>> d276142b19e (feat(opendisplay): implement pending upload handling for deep sleep devices)
 from enum import IntEnum
 import io
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, NotRequired, TypedDict, TypeVar, cast
 
 import aiohttp
 from opendisplay import (
     AuthenticationFailedError,
     AuthenticationRequiredError,
+    BLEConnectionError,
+    BLETimeoutError,
     DitherMode,
     FitMode,
     OpenDisplayDevice,
@@ -73,6 +75,18 @@ ATTR_REFRESH_MODE = "refresh_mode"
 ATTR_FIT_MODE = "fit_mode"
 ATTR_TONE_COMPRESSION = "tone_compression"
 _PENDING_UPLOAD_WAKE_SETTLE_DELAY_SECONDS = 3
+_EnumT = TypeVar("_EnumT", bound=IntEnum)
+
+
+class _ImageSelectorPayload(TypedDict):
+    """Shape returned by the media selector in service data."""
+
+    media_content_id: str
+    media_content_type: NotRequired[str]
+
+
+class _DeferredPendingUploadError(HomeAssistantError):
+    """Raised when an upload should be retried on the next wake-up."""
 
 
 @dataclass(slots=True)
@@ -89,11 +103,11 @@ class PendingDisplayUpload:
     expires_at: datetime | None = None
 
 
-def _str_to_int_enum(enum_class: type[IntEnum]) -> Callable[[str], Any]:
+def _str_to_int_enum(enum_class: type[_EnumT]) -> Callable[[str], _EnumT]:
     """Convert a lowercase enum name string to an enum member."""
     members = {m.name.lower(): m for m in enum_class}
 
-    def validate(value: str) -> IntEnum:
+    def validate(value: str) -> _EnumT:
         if (result := members.get(value)) is None:
             raise vol.Invalid(f"Invalid value: {value}")
         return result
@@ -291,7 +305,7 @@ async def _async_send_image_now(
 
     ble_device = async_ble_device_from_address(hass, address, connectable=True)
     if ble_device is None:
-        raise HomeAssistantError(
+        raise _DeferredPendingUploadError(
             translation_domain=DOMAIN,
             translation_key="device_not_found",
             translation_placeholders={
@@ -333,6 +347,19 @@ async def _async_send_image_now(
                 fit=pending.fit,
                 rotate=pending.rotate,
             )
+    except (BLEConnectionError, BLETimeoutError) as err:
+        raise _DeferredPendingUploadError(
+            translation_domain=DOMAIN,
+            translation_key="device_not_found",
+            translation_placeholders={
+                "address": address,
+                "reason": async_address_reachability_diagnostics(
+                    hass,
+                    address.upper(),
+                    BluetoothReachabilityIntent.CONNECTION,
+                ),
+            },
+        ) from err
     except (AuthenticationFailedError, AuthenticationRequiredError) as err:
         entry.async_start_reauth(hass)
         raise HomeAssistantError(
@@ -367,7 +394,7 @@ async def _async_queue_or_send_image(
     ):
         try:
             await _async_send_image_now(hass, entry, pending)
-        except HomeAssistantError:
+        except _DeferredPendingUploadError:
             _replace_pending_upload(hass, entry, pending)
             return
         _clear_pending_upload(hass, entry, cancel_task=True)
@@ -381,16 +408,10 @@ async def _async_try_pending_upload(
     entry: OpenDisplayConfigEntry,
 ) -> None:
     """Try to flush queued upload when a new advertisement arrives."""
-    pending_obj = entry.runtime_data.pending_upload
-    if pending_obj is None:
+    pending = entry.runtime_data.pending_upload
+    if pending is None:
         _clear_pending_upload(hass, entry, cancel_task=False)
         return
-
-    if not isinstance(pending_obj, PendingDisplayUpload):
-        _clear_pending_upload(hass, entry, cancel_task=True)
-        return
-
-    pending = pending_obj
 
     address = entry.unique_id
     assert address is not None
@@ -454,12 +475,12 @@ def async_register_pending_upload_listener(
 async def _async_upload_image(call: ServiceCall) -> None:
     """Handle the upload_image service call."""
     entry = _get_entry_for_device(call)
-    image_data: dict[str, Any] = call.data[ATTR_IMAGE]
+    image_data = cast(_ImageSelectorPayload, call.data[ATTR_IMAGE])
     rotation: Rotation = call.data[ATTR_ROTATION]
     dither_mode: DitherMode = call.data[ATTR_DITHER_MODE]
     refresh_mode: RefreshMode = call.data[ATTR_REFRESH_MODE]
     fit_mode: FitMode = call.data[ATTR_FIT_MODE]
-    tone_compression_pct: float | None = call.data.get(ATTR_TONE_COMPRESSION)
+    tone_compression_pct = cast(float | None, call.data.get(ATTR_TONE_COMPRESSION))
     tone_compression: float | str = (
         tone_compression_pct / 100.0 if tone_compression_pct is not None else "auto"
     )

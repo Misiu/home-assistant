@@ -107,6 +107,18 @@
       "message": "Failed to upload image to the display."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "deep_sleep_timeout_margin_minutes": "Deep sleep timeout margin (minutes)"
+        },
+        "data_description": {
+          "deep_sleep_timeout_margin_minutes": "Extra grace period after the configured deep sleep interval during which the device is still treated as available."
+        }
+      }
+    }
+  },
   "selector": {
     "dither_mode": {
       "options": {

@@ -1,10 +1,10 @@
 """Integration for OpenDisplay BLE e-paper displays."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Mapping
 import contextlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from opendisplay import (
     AuthenticationFailedError,
@@ -15,6 +15,7 @@ from opendisplay import (
     OpenDisplayDevice,
     OpenDisplayError,
 )
+from opendisplay.models import FirmwareVersion
 
 from homeassistant.components.bluetooth import (
     BluetoothReachabilityIntent,
@@ -23,15 +24,17 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util.json import JsonObjectType, JsonValueType
 
 if TYPE_CHECKING:
-    from opendisplay.models import FirmwareVersion
+    from .services import PendingDisplayUpload
 
+from .cache import deserialize_device_config, serialize_device_config
 from .const import CONF_ENCRYPTION_KEY, DOMAIN
 from .coordinator import OpenDisplayCoordinator
 from .deep_sleep import deep_sleep_seconds, deep_sleep_timeout_margin_minutes
@@ -42,6 +45,26 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 BASE_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
 FLEX_PLATFORMS = [Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR]
 
+STORAGE_VERSION = 1
+
+
+@dataclass(frozen=True)
+class OpenDisplayStoredData:
+    """Stored device metadata used to survive sleeping-device restarts."""
+
+    firmware: FirmwareVersion
+    device_config: GlobalConfig
+    is_flex: bool
+
+
+class OpenDisplayStoredDataDict(TypedDict):
+    """Serialized metadata shape stored in config entry data."""
+
+    version: int
+    firmware: JsonObjectType
+    device_config: JsonObjectType
+    is_flex: bool
+
 
 @dataclass
 class OpenDisplayRuntimeData:
@@ -51,10 +74,82 @@ class OpenDisplayRuntimeData:
     firmware: FirmwareVersion
     device_config: GlobalConfig
     is_flex: bool
-    upload_task: asyncio.Task | None = None
-    pending_upload: object | None = None
-    pending_upload_task: asyncio.Task | None = None
-    pending_upload_expiry_unsub: Callable[[], None] | None = None
+    upload_task: asyncio.Task[None] | None = None
+    pending_upload: PendingDisplayUpload | None = None
+    pending_upload_task: asyncio.Task[None] | None = None
+    pending_upload_expiry_unsub: CALLBACK_TYPE | None = None
+
+
+def _serialize_stored_data(
+    stored_data: OpenDisplayStoredData,
+) -> OpenDisplayStoredDataDict:
+    """Serialize stored device metadata for config entry storage."""
+    firmware_data: JsonObjectType = {
+        "major": cast(JsonValueType, stored_data.firmware["major"]),
+        "minor": cast(JsonValueType, stored_data.firmware["minor"]),
+        "sha": cast(JsonValueType, stored_data.firmware["sha"]),
+    }
+    return {
+        "version": STORAGE_VERSION,
+        "firmware": firmware_data,
+        "device_config": serialize_device_config(stored_data.device_config),
+        "is_flex": stored_data.is_flex,
+    }
+
+
+def _deserialize_stored_data(
+    data: Mapping[str, JsonValueType] | None,
+) -> OpenDisplayStoredData | None:
+    """Deserialize stored device metadata from config entry storage."""
+    if data is None:
+        return None
+
+    if data.get("version") != STORAGE_VERSION:
+        return None
+
+    firmware = data.get("firmware")
+    device_config_data = data.get("device_config")
+    is_flex = data.get("is_flex")
+    if (
+        not isinstance(firmware, dict)
+        or not isinstance(device_config_data, dict)
+        or not isinstance(is_flex, bool)
+    ):
+        return None
+
+    try:
+        device_config = deserialize_device_config(device_config_data)
+    except TypeError, ValueError:
+        return None
+
+    return OpenDisplayStoredData(
+        firmware=cast(FirmwareVersion, firmware),
+        device_config=device_config,
+        is_flex=is_flex,
+    )
+
+
+def _store_entry_metadata(
+    hass: HomeAssistant,
+    entry: OpenDisplayConfigEntry,
+    firmware: FirmwareVersion,
+    device_config: GlobalConfig,
+    is_flex: bool,
+) -> None:
+    """Persist device metadata needed to restore sleeping devices after restart."""
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "stored_data": _serialize_stored_data(
+                OpenDisplayStoredData(
+                    firmware=firmware,
+                    device_config=device_config,
+                    is_flex=is_flex,
+                )
+            ),
+        },
+    )
 
 
 type OpenDisplayConfigEntry = ConfigEntry[OpenDisplayRuntimeData]
@@ -92,40 +187,69 @@ async def async_setup_entry(hass: HomeAssistant, entry: OpenDisplayConfigEntry) 
         assert address is not None
 
     ble_device = async_ble_device_from_address(hass, address, connectable=True)
-    if ble_device is None:
-        raise ConfigEntryNotReady(
-            translation_domain=DOMAIN,
-            translation_key="device_not_found",
-            translation_placeholders={
-                "address": address,
-                "reason": async_address_reachability_diagnostics(
-                    hass,
-                    address.upper(),
-                    BluetoothReachabilityIntent.CONNECTION,
-                ),
-            },
-        )
     encryption_key = _get_encryption_key(entry)
 
-    try:
-        async with OpenDisplayDevice(
-            mac_address=address, ble_device=ble_device, encryption_key=encryption_key
-        ) as device:
-            fw = await device.read_firmware_version()
-            is_flex = device.is_flex
-    except (AuthenticationFailedError, AuthenticationRequiredError) as err:
-        raise ConfigEntryAuthFailed(
-            translation_domain=DOMAIN,
-            translation_key="authentication_error",
-        ) from err
-    except (BLEConnectionError, BLETimeoutError, OpenDisplayError) as err:
-        raise ConfigEntryNotReady(
-            translation_domain=DOMAIN,
-            translation_key="setup_connection_error",
-        ) from err
-    device_config = device.config
-    if TYPE_CHECKING:
-        assert device_config is not None
+    fw: FirmwareVersion
+    device_config: GlobalConfig
+    is_flex: bool
+    if ble_device is None:
+        stored = _deserialize_stored_data(entry.data.get("stored_data", {}))
+        if stored is None:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="device_not_found",
+                translation_placeholders={
+                    "address": address,
+                    "reason": async_address_reachability_diagnostics(
+                        hass,
+                        address.upper(),
+                        BluetoothReachabilityIntent.CONNECTION,
+                    ),
+                },
+            )
+        fw = stored.firmware
+        device_config = stored.device_config
+        is_flex = stored.is_flex
+        if deep_sleep_seconds(device_config) <= 0:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="device_not_found",
+                translation_placeholders={
+                    "address": address,
+                    "reason": async_address_reachability_diagnostics(
+                        hass,
+                        address.upper(),
+                        BluetoothReachabilityIntent.CONNECTION,
+                    ),
+                },
+            )
+    else:
+        try:
+            async with OpenDisplayDevice(
+                mac_address=address,
+                ble_device=ble_device,
+                encryption_key=encryption_key,
+            ) as device:
+                fw = await device.read_firmware_version()
+                is_flex = device.is_flex
+                loaded_device_config = device.config
+        except (AuthenticationFailedError, AuthenticationRequiredError) as err:
+            raise ConfigEntryAuthFailed(
+                translation_domain=DOMAIN,
+                translation_key="authentication_error",
+            ) from err
+        except (BLEConnectionError, BLETimeoutError, OpenDisplayError) as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="setup_connection_error",
+            ) from err
+        if loaded_device_config is None:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="setup_connection_error",
+            )
+        device_config = loaded_device_config
+        _store_entry_metadata(hass, entry, fw, device_config, is_flex)
 
     coordinator = OpenDisplayCoordinator(
         hass,

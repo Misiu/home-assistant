@@ -19,19 +19,61 @@ from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
     async_discovered_service_info,
 )
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.core import callback
 
-from .const import CONF_ENCRYPTION_KEY, DOMAIN
+from . import OpenDisplayConfigEntry
+from .const import (
+    CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+    CONF_ENCRYPTION_KEY,
+    DOMAIN,
+    MAX_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+    MIN_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+)
+from .deep_sleep import deep_sleep_timeout_margin_minutes
 
 _LOGGER = logging.getLogger(__name__)
 
 
 _ENCRYPTION_KEY_VALIDATOR = vol.All(str.strip, str.lower, vol.Match(r"^[0-9a-f]{32}$"))
+_DEEP_SLEEP_TIMEOUT_MARGIN_VALIDATOR = vol.All(
+    vol.Coerce(int),
+    vol.Range(
+        min=MIN_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+        max=MAX_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+    ),
+)
+
+
+def _options_schema(config_entry: ConfigEntry) -> vol.Schema:
+    """Return options flow schema."""
+    current_margin = deep_sleep_timeout_margin_minutes(config_entry.options)
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+                default=current_margin,
+            ): _DEEP_SLEEP_TIMEOUT_MARGIN_VALIDATOR,
+        }
+    )
 
 
 class OpenDisplayConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for OpenDisplay."""
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: OpenDisplayConfigEntry,
+    ) -> OpenDisplayOptionsFlow:
+        """Get the options flow for this handler."""
+        return OpenDisplayOptionsFlow()
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -239,4 +281,24 @@ class OpenDisplayConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             description_placeholders={"name": reauth_entry.title},
             errors=errors,
+        )
+
+
+class OpenDisplayOptionsFlow(OptionsFlowWithReload):
+    """Handle OpenDisplay options flow."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage integration options."""
+        if user_input is not None:
+            options = dict(self.config_entry.options)
+            options[CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES] = user_input[
+                CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES
+            ]
+            return self.async_create_entry(title="", data=options)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_options_schema(self.config_entry),
         )

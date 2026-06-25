@@ -13,6 +13,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import OpenDisplayConfigEntry
+from .coordinator import OpenDisplayUpdate
 from .entity import OpenDisplayEntity
 
 PARALLEL_UPDATES = 0
@@ -74,7 +75,7 @@ class OpenDisplayEventEntity(OpenDisplayEntity, EventEntity):
     """A button event entity for an OpenDisplay device."""
 
     entity_description: OpenDisplayEventEntityDescription
-    _last_processed_data: object | None = None
+    _last_processed_data: OpenDisplayUpdate | None = None
 
     @callback
     @override

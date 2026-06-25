@@ -12,6 +12,7 @@ from opendisplay import (
     AuthenticationFailedError,
     AuthenticationRequiredError,
     BLEConnectionError,
+    BLETimeoutError,
 )
 from opendisplay.models.config import PowerOption
 from PIL import Image as PILImage
@@ -506,3 +507,116 @@ async def test_queued_upload_is_flushed_after_device_seen(
     assert mock_upload_device.upload_image.call_count == 1
     assert mock_config_entry.runtime_data.pending_upload is None
     assert mock_config_entry.runtime_data.coordinator.pending_upload is False
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        AuthenticationFailedError("wrong key"),
+        AuthenticationRequiredError("auth required"),
+    ],
+)
+async def test_awake_deep_sleep_upload_auth_error_is_not_queued(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_resolve_media: MagicMock,
+    exception: Exception,
+) -> None:
+    """Auth failures for awake sleeping-capable devices must surface immediately."""
+    device_config = deepcopy(mock_opendisplay_device.config)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+    mock_config_entry.runtime_data.device_config = device_config
+    mock_config_entry.runtime_data.coordinator._available = True
+    mock_opendisplay_device.__aenter__.side_effect = exception
+
+    device_id = _device_id(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            "upload_image",
+            {
+                "device_id": device_id,
+                "image": {
+                    "media_content_id": "media-source://local/test.png",
+                    "media_content_type": "image/png",
+                },
+            },
+            blocking=True,
+        )
+
+    assert mock_config_entry.runtime_data.pending_upload is None
+    assert mock_config_entry.runtime_data.coordinator.pending_upload is False
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        BLEConnectionError("connection lost"),
+        BLETimeoutError("timeout"),
+    ],
+)
+async def test_awake_deep_sleep_transient_upload_error_is_queued(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+    mock_resolve_media: MagicMock,
+    exception: Exception,
+) -> None:
+    """Transient reachability failures while awake are retried on the next wake-up."""
+    device_config = deepcopy(mock_opendisplay_device.config)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+    mock_config_entry.runtime_data.device_config = device_config
+    mock_config_entry.runtime_data.coordinator._available = True
+    mock_opendisplay_device.__aenter__.side_effect = exception
+
+    device_id = _device_id(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        DOMAIN,
+        "upload_image",
+        {
+            "device_id": device_id,
+            "image": {
+                "media_content_id": "media-source://local/test.png",
+                "media_content_type": "image/png",
+            },
+        },
+        blocking=True,
+    )
+
+    assert mock_config_entry.runtime_data.pending_upload is not None
+    assert mock_config_entry.runtime_data.coordinator.pending_upload is True

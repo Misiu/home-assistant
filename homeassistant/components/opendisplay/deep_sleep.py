@@ -1,7 +1,10 @@
 """Deep sleep helper functions for OpenDisplay devices."""
 
 from collections.abc import Mapping
-from typing import Any
+
+from opendisplay.models.config import GlobalConfig
+
+from homeassistant.util.json import JsonValueType
 
 from .const import (
     CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
@@ -11,22 +14,23 @@ from .const import (
 )
 
 
-def deep_sleep_seconds(device_config: object) -> int:
+def deep_sleep_seconds(device_config: GlobalConfig) -> int:
     """Return configured deep sleep duration in seconds."""
-    power = getattr(device_config, "power", None)
-    value = getattr(power, "deep_sleep_time_seconds", 0)
+    value = device_config.power.deep_sleep_time_seconds
     try:
         return max(0, int(value))
     except TypeError, ValueError:
         return 0
 
 
-def deep_sleep_enabled(device_config: object) -> bool:
+def deep_sleep_enabled(device_config: GlobalConfig) -> bool:
     """Return True when deep sleep is configured on the device."""
     return deep_sleep_seconds(device_config) > 0
 
 
-def deep_sleep_timeout_margin_minutes(options: Mapping[str, Any] | None) -> int:
+def deep_sleep_timeout_margin_minutes(
+    options: Mapping[str, JsonValueType] | None,
+) -> int:
     """Return normalized deep sleep timeout margin in minutes."""
     raw_value = (
         options.get(CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES)
@@ -34,6 +38,8 @@ def deep_sleep_timeout_margin_minutes(options: Mapping[str, Any] | None) -> int:
         else None
     )
     if raw_value is None:
+        return DEFAULT_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES
+    if not isinstance(raw_value, str | int | float):
         return DEFAULT_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES
 
     try:

@@ -13,7 +13,12 @@ from opendisplay import (
 import pytest
 
 from homeassistant import config_entries
-from homeassistant.components.opendisplay.const import CONF_ENCRYPTION_KEY, DOMAIN
+from homeassistant.components.opendisplay.const import (
+    CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+    CONF_ENCRYPTION_KEY,
+    DEFAULT_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES,
+    DOMAIN,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -500,3 +505,45 @@ async def test_reauth_invalid_key_format(
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {CONF_ENCRYPTION_KEY: "invalid_key_format"}
+
+
+async def test_options_flow_update_timeout_margin(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test options flow updates deep sleep timeout margin."""
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    margin = 15
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES: margin},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert mock_config_entry.options[CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES] == margin
+
+
+async def test_options_flow_default_timeout_margin(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Test options flow uses default timeout margin when no option exists."""
+    mock_config_entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    assert result["type"] is FlowResultType.FORM
+    schema = result["data_schema"]
+    expected = schema({})
+    assert (
+        expected[CONF_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES]
+        == DEFAULT_DEEP_SLEEP_TIMEOUT_MARGIN_MINUTES
+    )

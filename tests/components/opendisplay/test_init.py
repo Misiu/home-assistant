@@ -1,6 +1,7 @@
 """Test the OpenDisplay integration setup and unload."""
 
 import asyncio
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from opendisplay import (
@@ -10,6 +11,7 @@ from opendisplay import (
     BLETimeoutError,
     OpenDisplayError,
 )
+from opendisplay.models.config import PowerOption
 import pytest
 
 from homeassistant.components.opendisplay.const import CONF_ENCRYPTION_KEY, DOMAIN
@@ -115,6 +117,54 @@ async def test_setup_device_registered(
         device_registry, mock_config_entry.entry_id
     )
     assert len(devices) == 1
+
+
+async def test_setup_uses_cached_metadata_while_deep_sleep_device_is_sleeping(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_opendisplay_device: MagicMock,
+) -> None:
+    """Sleeping deep-sleep devices should still set up from cached metadata."""
+    device_config = deepcopy(mock_opendisplay_device.config)
+    power = device_config.power
+    device_config.power = PowerOption(
+        power_mode=power.power_mode_enum,
+        battery_capacity_mah=power.battery_capacity_mah,
+        sleep_timeout_ms=power.sleep_timeout_ms,
+        tx_power=power.tx_power,
+        sleep_flags=power.sleep_flags,
+        battery_sense_pin=power.battery_sense_pin,
+        battery_sense_enable_pin=power.battery_sense_enable_pin,
+        battery_sense_flags=power.battery_sense_flags,
+        capacity_estimator=power.capacity_estimator,
+        voltage_scaling_factor=power.voltage_scaling_factor,
+        deep_sleep_current_ua=power.deep_sleep_current_ua,
+        deep_sleep_time_seconds=300,
+        reserved=power.reserved,
+    )
+    mock_opendisplay_device.config = device_config
+    mock_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert "stored_data" in mock_config_entry.data
+
+    assert await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    with patch(
+        "homeassistant.components.opendisplay.async_ble_device_from_address",
+        return_value=None,
+    ):
+        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert (
+        mock_config_entry.runtime_data.device_config.power.deep_sleep_time_seconds
+        == 300
+    )
 
 
 @pytest.mark.parametrize(
