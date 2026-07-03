@@ -2,13 +2,9 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-<<<<<<< HEAD
-from typing import override
-=======
 from datetime import datetime
 import logging
-from typing import cast
->>>>>>> d276142b19e (feat(opendisplay): implement pending upload handling for deep sleep devices)
+from typing import cast, override
 
 from opendisplay import voltage_to_percent
 from opendisplay.models.enums import CapacityEstimator, PowerMode
@@ -31,7 +27,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import OpenDisplayConfigEntry
-from .coordinator import OpenDisplayUpdate
+from .coordinator import OpenDisplayCoordinator, OpenDisplayUpdate
 from .entity import OpenDisplayEntity
 
 PARALLEL_UPDATES = 0
@@ -143,7 +139,7 @@ class OpenDisplaySensorEntity(OpenDisplayEntity, RestoreSensor):
 
     def __init__(
         self,
-        coordinator,
+        coordinator: OpenDisplayCoordinator,
         description: OpenDisplaySensorEntityDescription,
     ) -> None:
         """Initialize the sensor entity."""
@@ -151,10 +147,7 @@ class OpenDisplaySensorEntity(OpenDisplayEntity, RestoreSensor):
         self._attr_native_value: float | int | datetime | None = None
 
     @property
-<<<<<<< HEAD
     @override
-    def native_value(self) -> float | int | None:
-=======
     def available(self) -> bool:
         """Return whether sensor data is available."""
         if self.entity_description.key in ("deep_sleep_time", "expected_wakeup"):
@@ -166,6 +159,7 @@ class OpenDisplaySensorEntity(OpenDisplayEntity, RestoreSensor):
         """Return whether this sensor can keep restored values while sleeping."""
         return self.coordinator.deep_sleep_time_seconds > 0
 
+    @override
     async def async_added_to_hass(self) -> None:
         """Restore last known state for sleeping devices."""
         await super().async_added_to_hass()
@@ -189,8 +183,8 @@ class OpenDisplaySensorEntity(OpenDisplayEntity, RestoreSensor):
             self.coordinator.async_restore_last_seen(self._attr_native_value)
 
     @property
+    @override
     def native_value(self) -> float | int | datetime | None:
->>>>>>> d276142b19e (feat(opendisplay): implement pending upload handling for deep sleep devices)
         """Return the sensor value."""
         if self.entity_description.key == "deep_sleep_time":
             self._attr_native_value = self.coordinator.deep_sleep_time_seconds

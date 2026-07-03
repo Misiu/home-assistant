@@ -3,11 +3,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
-<<<<<<< HEAD
-from typing import override
-=======
 import math
->>>>>>> d276142b19e (feat(opendisplay): implement pending upload handling for deep sleep devices)
+from typing import override
 
 from opendisplay import MANUFACTURER_ID, AdvertisementTracker, parse_advertisement
 from opendisplay.models.advertisement import AdvertisementData, ButtonChangeEvent
@@ -90,6 +87,7 @@ class OpenDisplayCoordinator(PassiveBluetoothDataUpdateCoordinator):
         self._pending_upload = False
 
     @callback
+    @override
     def async_start(self) -> CALLBACK_TYPE:
         """Start coordinator callbacks and deep sleep deadline watcher."""
         parent_unsub = super().async_start()
@@ -167,6 +165,7 @@ class OpenDisplayCoordinator(PassiveBluetoothDataUpdateCoordinator):
         self.async_update_listeners()
 
     @property
+    @override
     def available(self) -> bool:
         """Return availability with deep sleep grace semantics."""
         if self.deep_sleep_time_seconds <= 0:

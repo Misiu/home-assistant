@@ -2,13 +2,8 @@
 
 import asyncio
 from collections.abc import Callable
-<<<<<<< HEAD
-from datetime import timedelta
-=======
-import contextlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
->>>>>>> d276142b19e (feat(opendisplay): implement pending upload handling for deep sleep devices)
 from enum import IntEnum
 import io
 from typing import TYPE_CHECKING, NotRequired, TypedDict, TypeVar, cast
