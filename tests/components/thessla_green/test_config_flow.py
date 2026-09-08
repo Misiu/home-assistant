@@ -45,6 +45,10 @@ RECONFIGURE_INPUT = {
     CONF_FRAMER: "socket",
     CONF_UNIT_ID: UNIT_ID,
 }
+RELINK_INPUT = {
+    **USER_INPUT,
+    CONF_FRAMER: "socket",
+}
 OPTIONS = {
     CONF_CONSTANT_FLOW: True,
     CONF_COMFORT: True,
@@ -320,6 +324,28 @@ async def test_reconfigure_flow(
     assert mock_config_entry.title == f"AirPack Home h {SERIAL}"
 
 
+async def test_reconfigure_new_endpoint_does_not_unload_active_link(
+    hass: HomeAssistant, setup_integration: MockConfigEntry
+) -> None:
+    """Probe a different Modbus endpoint without dropping the working link."""
+    result = await _start_reconfigure_flow(hass, setup_integration)
+
+    with (
+        patch.object(hass.config_entries, "async_unload", AsyncMock()) as unload,
+        patch(
+            "homeassistant.components.thessla_green.config_flow._async_validate",
+            AsyncMock(return_value=(SERIAL, "4.85.0")),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], RECONFIGURE_INPUT
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    unload.assert_not_awaited()
+
+
 async def test_reconfigure_flow_wrong_device(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -394,7 +420,7 @@ async def test_reconfigure_flow_recovers_from_unknown_error(
 async def test_reconfigure_loaded_entry_restored_after_error(
     hass: HomeAssistant, setup_integration: MockConfigEntry
 ) -> None:
-    """Restore a loaded entry when validation of new settings fails."""
+    """Restore a loaded entry when relink validation fails."""
     result = await _start_reconfigure_flow(hass, setup_integration)
 
     with (
@@ -410,7 +436,7 @@ async def test_reconfigure_loaded_entry_restored_after_error(
         ),
     ):
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], RECONFIGURE_INPUT
+            result["flow_id"], RELINK_INPUT
         )
 
     assert result["type"] is FlowResultType.FORM
@@ -419,10 +445,37 @@ async def test_reconfigure_loaded_entry_restored_after_error(
     setup.assert_awaited_once_with(setup_integration.entry_id)
 
 
+async def test_reconfigure_relink_wrong_device_restores_entry(
+    hass: HomeAssistant, setup_integration: MockConfigEntry
+) -> None:
+    """Restore a released link before aborting on a different controller."""
+    result = await _start_reconfigure_flow(hass, setup_integration)
+
+    with (
+        patch.object(
+            hass.config_entries, "async_unload", AsyncMock(return_value=True)
+        ),
+        patch.object(
+            hass.config_entries, "async_setup", AsyncMock(return_value=True)
+        ) as setup,
+        patch(
+            "homeassistant.components.thessla_green.config_flow._async_validate",
+            AsyncMock(return_value=("001122334455", "4.85.0")),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], RELINK_INPUT
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "unique_id_mismatch"
+    setup.assert_awaited_once_with(setup_integration.entry_id)
+
+
 async def test_reconfigure_stops_when_unload_fails(
     hass: HomeAssistant, setup_integration: MockConfigEntry
 ) -> None:
-    """Do not validate new settings if the active entry cannot be unloaded."""
+    """Do not validate new settings if the active link cannot be released."""
     result = await _start_reconfigure_flow(hass, setup_integration)
 
     with (
@@ -435,7 +488,7 @@ async def test_reconfigure_stops_when_unload_fails(
         ) as validate,
     ):
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], RECONFIGURE_INPUT
+            result["flow_id"], RELINK_INPUT
         )
 
     assert result["type"] is FlowResultType.FORM
