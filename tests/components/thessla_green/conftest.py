@@ -1,6 +1,7 @@
 """Fixtures for the Thessla Green integration tests."""
 
-from unittest.mock import patch
+from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock, patch
 
 from modbus_connection.mock import MockModbusConnection, MockModbusUnit
 import pytest
@@ -98,6 +99,20 @@ def mock_modbus_unit(
     return unit
 
 
+@pytest.fixture(autouse=True)
+async def mock_modbus_connection_class(
+    mock_modbus_connection: MockModbusConnection,
+    mock_modbus_unit: MockModbusUnit,
+) -> AsyncGenerator[MagicMock]:
+    """Keep every Thessla Green test on the in-memory Modbus transport."""
+    await mock_modbus_connection.connect()
+    with patch(
+        "homeassistant.components.modbus.connection.ModbusConnection",
+        return_value=mock_modbus_connection,
+    ) as mock_connection_cls:
+        yield mock_connection_cls
+
+
 @pytest.fixture
 def mock_config_entry() -> MockConfigEntry:
     """Return a configured Thessla Green entry."""
@@ -119,15 +134,9 @@ def mock_config_entry() -> MockConfigEntry:
 async def setup_integration(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
-    mock_modbus_connection: MockModbusConnection,
-    mock_modbus_unit: MockModbusUnit,
 ) -> MockConfigEntry:
     """Set up the integration against the in-memory Modbus transport."""
     mock_config_entry.add_to_hass(hass)
-    with patch(
-        "homeassistant.components.modbus.connection.ModbusConnection",
-        return_value=mock_modbus_connection,
-    ):
-        assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
-        await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
     return mock_config_entry
