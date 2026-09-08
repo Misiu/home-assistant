@@ -17,6 +17,8 @@ from .entity import ThesslaGreenEntity
 
 @dataclass(frozen=True, kw_only=True)
 class ThesslaGreenBinarySensorDescription(BinarySensorEntityDescription):
+    """Describe a binary value exposed by the device library."""
+
     component: str
     attribute: str
 
@@ -73,6 +75,7 @@ async def async_setup_entry(
     entry: ThesslaGreenConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Set up Thessla Green binary sensors."""
     coordinator = entry.runtime_data
     descriptions = list(DESCRIPTIONS)
     if coordinator.device.constant_flow is not None:
@@ -112,6 +115,8 @@ async def async_setup_entry(
 
 
 class ThesslaGreenBinarySensor(ThesslaGreenEntity, BinarySensorEntity):
+    """Represent one AirPack4 binary state."""
+
     entity_description: ThesslaGreenBinarySensorDescription
 
     def __init__(
@@ -119,11 +124,13 @@ class ThesslaGreenBinarySensor(ThesslaGreenEntity, BinarySensorEntity):
         coordinator: ThesslaGreenCoordinator,
         description: ThesslaGreenBinarySensorDescription,
     ) -> None:
+        """Initialize the binary sensor."""
         super().__init__(coordinator, description.key)
         self.entity_description = description
 
     @property
     def is_on(self) -> bool | None:
+        """Return the current binary state."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = getattr(component, self.entity_description.attribute)
         return value if isinstance(value, bool) else None
