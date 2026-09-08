@@ -32,6 +32,8 @@ jobs:
         run: |
           python -m ruff format --check homeassistant/components/thessla_green tests/components/thessla_green
           python -m ruff check homeassistant/components/thessla_green tests/components/thessla_green
+      - name: Compile English translations
+        run: python -m script.translations develop --all
       - name: Tests
         run: python -m pytest -q tests/components/thessla_green
       - name: Compile
