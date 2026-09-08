@@ -20,8 +20,8 @@ DEVICE_FAMILY_NAMES: Final = {
     "home_h": "AirPack Home h",
     "home_v": "AirPack Home v",
     "home_f": "AirPack Home f",
-    "series_4_h": "AirPack4 h",
-    "series_4_v": "AirPack4 v",
+    "series_4_h": "AirPack⁴ h",
+    "series_4_v": "AirPack⁴ v",
     "airpack_f": "AirPack f",
 }
 SCAN_INTERVAL: Final = timedelta(seconds=30)
