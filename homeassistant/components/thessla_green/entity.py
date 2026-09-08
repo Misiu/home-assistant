@@ -1,7 +1,5 @@
 """Base entity for Thessla Green AirPack4."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from modbus_connection import ModbusError
@@ -21,6 +19,7 @@ class ThesslaGreenEntity(CoordinatorEntity[ThesslaGreenCoordinator]):
     _attr_has_entity_name = True
 
     def __init__(self, coordinator: ThesslaGreenCoordinator, key: str) -> None:
+        """Initialize the entity."""
         super().__init__(coordinator)
         entry = coordinator.config_entry
         serial = (
