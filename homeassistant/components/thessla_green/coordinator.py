@@ -40,5 +40,7 @@ class ThesslaGreenCoordinator(DataUpdateCoordinator[ThesslaGreenDevice]):
         try:
             await self.device.async_update()
         except ModbusError as err:
-            raise UpdateFailed(f"Error communicating with Thessla Green: {err}") from err
+            raise UpdateFailed(
+                f"Error communicating with Thessla Green: {err}"
+            ) from err
         return self.device
