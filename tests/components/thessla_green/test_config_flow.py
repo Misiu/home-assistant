@@ -46,7 +46,7 @@ async def test_user_flow(
         )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == f"AirPack4 h {SERIAL}"
+    assert result["title"] == f"AirPack⁴ h {SERIAL}"
     assert result["data"] == {
         CONF_DEVICE_FAMILY: DEVICE_FAMILY,
         CONF_HOST: HOST,
