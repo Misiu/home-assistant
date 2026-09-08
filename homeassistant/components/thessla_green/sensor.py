@@ -149,6 +149,7 @@ class ThesslaGreenSensor(ThesslaGreenEntity, SensorEntity):
         coordinator: ThesslaGreenCoordinator,
         description: ThesslaGreenSensorDescription,
     ) -> None:
+        """Initialize the sensor."""
         super().__init__(coordinator, description.key)
         self.entity_description = description
 
