@@ -37,9 +37,9 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_HOST, default=values.get(CONF_HOST, "")): str,
-            vol.Required(CONF_PORT, default=values.get(CONF_PORT, DEFAULT_PORT)): vol.All(
-                vol.Coerce(int), vol.Range(min=1, max=65535)
-            ),
+            vol.Required(
+                CONF_PORT, default=values.get(CONF_PORT, DEFAULT_PORT)
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
             vol.Required(
                 CONF_FRAMER, default=values.get(CONF_FRAMER, DEFAULT_FRAMER)
             ): vol.In(FRAMERS),
@@ -103,7 +103,9 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title=f"AirPack4 {serial}", data=user_input
                 )
-        return self.async_show_form(step_id="user", data_schema=_schema(), errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=_schema(), errors=errors
+        )
 
     @override
     async def async_step_reconfigure(
@@ -145,7 +147,9 @@ class ThesslaGreenOptionsFlow(OptionsFlow):
                 {
                     vol.Required(
                         CONF_CONSTANT_FLOW,
-                        default=self.config_entry.options.get(CONF_CONSTANT_FLOW, False),
+                        default=self.config_entry.options.get(
+                            CONF_CONSTANT_FLOW, False
+                        ),
                     ): bool,
                     vol.Required(
                         CONF_COMFORT,
