@@ -25,7 +25,7 @@ jobs:
       - name: Install Core and validation tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements_test.txt -e . 'infrared-protocols==10.0.0' 'rf-protocols==4.3.0' 'paho-mqtt==2.1.0' 'modbus-connection[tmodbus]==4.11.1' 'pymodbus==3.13.1' 'tmodbus==0.6.2' 'thessla-green-modbus==0.1.0a2'
+          python -m pip install -r requirements_test.txt -e . 'infrared-protocols==10.0.0' 'rf-protocols==4.3.0' 'paho-mqtt==2.1.0' 'aiohasupervisor==0.6.0' 'modbus-connection[tmodbus]==4.11.1' 'pymodbus==3.13.1' 'tmodbus==0.6.2' 'thessla-green-modbus==0.1.0a2'
       - name: Hassfest
         run: python -m script.hassfest --integration-path homeassistant/components/thessla_green --requirements
       - name: Ruff
