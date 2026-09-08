@@ -3,7 +3,10 @@
 from modbus_connection.mock import MockModbusUnit
 
 from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN, SERVICE_SET_VALUE
-from homeassistant.components.select import DOMAIN as SELECT_DOMAIN, SERVICE_SELECT_OPTION
+from homeassistant.components.select import (
+    DOMAIN as SELECT_DOMAIN,
+    SERVICE_SELECT_OPTION,
+)
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SERVICE_TURN_OFF
 from homeassistant.components.thessla_green.const import DOMAIN
 from homeassistant.config_entries import ConfigEntryState
