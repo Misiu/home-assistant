@@ -8,6 +8,7 @@ from thessla_green_modbus import DeviceFamily, DeviceOptions, ThesslaGreenDevice
 from homeassistant.components.modbus import async_get_unit
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError, HomeAssistantError
 
 from .const import (
     CONF_COMFORT,
@@ -41,7 +42,11 @@ async def async_setup_entry(
         port=int(entry.data[CONF_PORT]),
         framer=cast(Framer, entry.data[CONF_FRAMER]),
     )
-    unit = async_get_unit(hass, entry, params, int(entry.data[CONF_UNIT_ID]))
+    try:
+        unit = async_get_unit(hass, entry, params, int(entry.data[CONF_UNIT_ID]))
+    except HomeAssistantError as err:
+        raise ConfigEntryError(str(err)) from err
+
     device = ThesslaGreenDevice(
         unit,
         family=DeviceFamily(entry.data.get(CONF_DEVICE_FAMILY, DEFAULT_DEVICE_FAMILY)),
