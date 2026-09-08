@@ -43,7 +43,7 @@ RECONFIGURE_INPUT = {
     CONF_HOST: "2.3.4.5",
     CONF_PORT: 1502,
     CONF_FRAMER: "socket",
-    CONF_UNIT_ID: 11,
+    CONF_UNIT_ID: UNIT_ID,
 }
 OPTIONS = {
     CONF_CONSTANT_FLOW: True,
@@ -96,14 +96,10 @@ async def test_user_flow(
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
     """Configure a Thessla Green controller after reading its serial."""
-    with patch(
-        "homeassistant.components.modbus.connection.ModbusConnection",
-        return_value=mock_modbus_connection,
-    ):
-        result = await _start_user_flow(hass)
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], USER_INPUT
-        )
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == f"AirPack⁴ h {SERIAL}"
@@ -120,14 +116,10 @@ async def test_user_flow_cannot_identify_device(
     for address in range(24, 30):
         mock_modbus_unit.input[address] = 0
 
-    with patch(
-        "homeassistant.components.modbus.connection.ModbusConnection",
-        return_value=mock_modbus_connection,
-    ):
-        result = await _start_user_flow(hass)
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], USER_INPUT
-        )
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
@@ -141,14 +133,10 @@ async def test_user_flow_cannot_read_device(
     """Handle a Modbus read failure while validating the controller."""
     mock_modbus_unit.fail_requests(ModbusError("read failed"))
 
-    with patch(
-        "homeassistant.components.modbus.connection.ModbusConnection",
-        return_value=mock_modbus_connection,
-    ):
-        result = await _start_user_flow(hass)
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], USER_INPUT
-        )
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
@@ -227,14 +215,10 @@ async def test_user_flow_duplicate_device(
     )
     existing.add_to_hass(hass)
 
-    with patch(
-        "homeassistant.components.modbus.connection.ModbusConnection",
-        return_value=mock_modbus_connection,
-    ):
-        result = await _start_user_flow(hass)
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], USER_INPUT
-        )
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], USER_INPUT
+    )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
@@ -285,7 +269,7 @@ async def test_options_flow(
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "init"
-    assert result["errors"] == {}
+    assert result["errors"] is None
     assert result["data_schema"]({}) == {
         CONF_CONSTANT_FLOW: False,
         CONF_COMFORT: False,
