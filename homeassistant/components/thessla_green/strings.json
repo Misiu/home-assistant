@@ -56,6 +56,12 @@
           "comfort": "Comfort temperature control",
           "erv": "ERV post-heater",
           "pressure_filter_alarm": "Pressure-switch filter alarm (register 8444)"
+        },
+        "data_description": {
+          "constant_flow": "Enable registers for units equipped with Constant Flow airflow control.",
+          "comfort": "Enable Comfort temperature-control registers when supported by the controller.",
+          "erv": "Enable ERV post-heater registers when this hardware is present.",
+          "pressure_filter_alarm": "Enable the pressure-switch filter alarm at register 8444 only on controllers that support it."
         }
       }
     }
