@@ -14,9 +14,9 @@ from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from tests.common import MockConfigEntry
-
 from .conftest import SERIAL
+
+from tests.common import MockConfigEntry
 
 
 def _entity_id(hass: HomeAssistant, platform: str, key: str) -> str:
