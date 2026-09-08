@@ -8,7 +8,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, UnitOfTemperature, UnitOfVolumeFlowRate
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -75,7 +75,8 @@ BASE_DESCRIPTIONS: tuple[ThesslaGreenSensorDescription, ...] = (
         translation_key="supply_flow",
         component="ventilation",
         attribute="supply_flow",
-        native_unit_of_measurement="m³/h",
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     ThesslaGreenSensorDescription(
@@ -83,7 +84,8 @@ BASE_DESCRIPTIONS: tuple[ThesslaGreenSensorDescription, ...] = (
         translation_key="extract_flow",
         component="ventilation",
         attribute="extract_flow",
-        native_unit_of_measurement="m³/h",
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
     ),
 )
@@ -110,7 +112,8 @@ CONSTANT_FLOW_DESCRIPTIONS: tuple[ThesslaGreenSensorDescription, ...] = (
         translation_key="constant_flow_supply_target",
         component="constant_flow",
         attribute="supply_target_flow",
-        native_unit_of_measurement="m³/h",
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     ThesslaGreenSensorDescription(
@@ -118,7 +121,8 @@ CONSTANT_FLOW_DESCRIPTIONS: tuple[ThesslaGreenSensorDescription, ...] = (
         translation_key="constant_flow_extract_target",
         component="constant_flow",
         attribute="extract_target_flow",
-        native_unit_of_measurement="m³/h",
+        device_class=SensorDeviceClass.VOLUME_FLOW_RATE,
+        native_unit_of_measurement=UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
     ),
 )
