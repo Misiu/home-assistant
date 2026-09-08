@@ -8,7 +8,12 @@ from thessla_green_modbus import DeviceFamily, ThesslaGreenDevice
 import voluptuous as vol
 
 from homeassistant.components.modbus import async_get_temporary_unit
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigEntryState,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -172,24 +177,34 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            try:
-                serial, _firmware = await _async_validate(self.hass, user_input)
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception(
-                    "Unexpected exception while reconnecting to Thessla Green"
-                )
+            entry_was_loaded = entry.state is ConfigEntryState.LOADED
+            if entry_was_loaded and not await self.hass.config_entries.async_unload(
+                entry.entry_id
+            ):
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(serial)
-                self._abort_if_unique_id_mismatch()
-                family = _family(user_input)
-                return self.async_update_reload_and_abort(
-                    entry,
-                    data_updates=user_input,
-                    title=_entry_title(family, serial),
-                )
+                try:
+                    serial, _firmware = await _async_validate(self.hass, user_input)
+                except CannotConnect:
+                    errors["base"] = "cannot_connect"
+                except Exception:
+                    _LOGGER.exception(
+                        "Unexpected exception while reconnecting to Thessla Green"
+                    )
+                    errors["base"] = "unknown"
+                else:
+                    await self.async_set_unique_id(serial)
+                    self._abort_if_unique_id_mismatch()
+                    family = _family(user_input)
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data_updates=user_input,
+                        title=_entry_title(family, serial),
+                    )
+
+                if entry_was_loaded:
+                    await self.hass.config_entries.async_setup(entry.entry_id)
+
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=_schema(dict(entry.data)),
