@@ -1,0 +1,11 @@
+{
+  "domain": "thessla_green",
+  "name": "Thessla Green",
+  "codeowners": ["@Misiu"],
+  "config_flow": true,
+  "dependencies": ["modbus"],
+  "documentation": "https://www.home-assistant.io/integrations/thessla_green",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": ["thessla-green-modbus==0.1.0a2"]
+}

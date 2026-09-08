@@ -1,0 +1,100 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Thessla Green AirPack4",
+        "description": "Enter the settings of the Modbus TCP gateway connected to the AirPack4.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "framer": "Framing",
+          "unit_id": "Unit ID"
+        },
+        "data_description": {
+          "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Thessla Green AirPack4",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "framer": "Framing",
+          "unit_id": "Unit ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to and identify the AirPack4.",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This AirPack4 is already configured.",
+      "unique_id_mismatch": "The AirPack4 at the new address does not match the configured device."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optional AirPack4 capabilities",
+        "description": "Enable only capabilities supported by this controller. Unsupported register ranges are not probed automatically.",
+        "data": {
+          "constant_flow": "Constant Flow",
+          "comfort": "Comfort temperature control",
+          "erv": "ERV post-heater",
+          "legacy_filter_alarm": "Legacy community filter alarm (register 8444)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "outside_temperature": {"name": "Outdoor temperature"},
+      "supply_temperature": {"name": "Supply temperature"},
+      "extract_temperature": {"name": "Extract temperature"},
+      "after_fpx_temperature": {"name": "FPX temperature"},
+      "ambient_temperature": {"name": "Ambient temperature"},
+      "supply_flow": {"name": "Supply airflow"},
+      "extract_flow": {"name": "Extract airflow"},
+      "constant_flow_supply_percentage": {"name": "Constant Flow supply percentage"},
+      "constant_flow_extract_percentage": {"name": "Constant Flow extract percentage"},
+      "constant_flow_supply_target": {"name": "Constant Flow supply target"},
+      "constant_flow_extract_target": {"name": "Constant Flow extract target"}
+    },
+    "binary_sensor": {
+      "fans_powered": {"name": "Fan power"},
+      "bypass_actuator": {"name": "Bypass actuator"},
+      "frost_protection": {"name": "Frost protection"},
+      "warning": {"name": "Warning"},
+      "error": {"name": "Error"},
+      "fpx_thermal_protection": {"name": "FPX thermal protection"},
+      "supply_fan_failure": {"name": "Supply fan failure"},
+      "extract_fan_failure": {"name": "Extract fan failure"},
+      "supply_flow_sensor_failure": {"name": "Supply flow sensor failure"},
+      "extract_flow_sensor_failure": {"name": "Extract flow sensor failure"},
+      "supply_filter_missing": {"name": "Supply filter missing"},
+      "extract_filter_missing": {"name": "Extract filter missing"},
+      "supply_filter_due": {"name": "Supply filter replacement"},
+      "extract_filter_due": {"name": "Extract filter replacement"},
+      "duct_filter_due": {"name": "Duct filter replacement"},
+      "constant_flow_active": {"name": "Constant Flow active"},
+      "erv_active": {"name": "ERV post-heater active"},
+      "legacy_filter_due": {"name": "Legacy filter replacement"}
+    },
+    "switch": {
+      "enabled": {"name": "Ventilation"},
+      "automatic_bypass": {"name": "Automatic bypass"}
+    },
+    "select": {
+      "operating_mode": {"name": "Operating mode"},
+      "season": {"name": "Season"},
+      "special_mode": {"name": "Special mode"},
+      "comfort_mode": {"name": "Comfort mode"},
+      "erv_mode": {"name": "ERV mode"}
+    },
+    "number": {
+      "manual_speed": {"name": "Manual airflow"},
+      "comfort_temperature": {"name": "Comfort temperature"}
+    }
+  }
+}
