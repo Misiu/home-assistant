@@ -65,9 +65,7 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_PORT, default=values.get(CONF_PORT, DEFAULT_PORT)
             ): vol.All(
                 NumberSelector(
-                    NumberSelectorConfig(
-                        min=1, max=65535, mode=NumberSelectorMode.BOX
-                    )
+                    NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
                 ),
                 vol.Coerce(int),
             ),
@@ -151,7 +149,9 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
-                _LOGGER.exception("Unexpected exception while connecting to Thessla Green")
+                _LOGGER.exception(
+                    "Unexpected exception while connecting to Thessla Green"
+                )
                 errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(serial)
@@ -177,7 +177,9 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except Exception:
-                _LOGGER.exception("Unexpected exception while reconnecting to Thessla Green")
+                _LOGGER.exception(
+                    "Unexpected exception while reconnecting to Thessla Green"
+                )
                 errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(serial)
