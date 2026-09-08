@@ -27,6 +27,13 @@
           "port": "Port",
           "framer": "Framing",
           "unit_id": "Unit ID"
+        },
+        "data_description": {
+          "device_family": "Select the closest known family. Use Other / unknown for models that are not listed.",
+          "host": "IP address or hostname of the Modbus TCP gateway.",
+          "port": "TCP port used by the Modbus gateway.",
+          "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter.",
+          "unit_id": "Modbus unit address of the Thessla Green controller. The factory default is 10."
         }
       }
     },
