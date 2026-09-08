@@ -25,6 +25,7 @@ class ThesslaGreenCoordinator(DataUpdateCoordinator[AirPack4]):
         entry: ThesslaGreenConfigEntry,
         device: AirPack4,
     ) -> None:
+        """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
