@@ -1,5 +1,6 @@
 """Config flow for Thessla Green ventilation units."""
 
+from collections.abc import Mapping
 import logging
 from typing import Any, Literal, cast, override
 
@@ -9,10 +10,11 @@ import voluptuous as vol
 
 from homeassistant.components.modbus import async_get_temporary_unit
 from homeassistant.config_entries import (
+    ConfigEntry,
     ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
@@ -50,7 +52,7 @@ _LOGGER = logging.getLogger(__name__)
 type Framer = Literal["rtu", "socket"]
 
 
-def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+def _schema(defaults: Mapping[str, Any] | None = None) -> vol.Schema:
     """Return the connection schema with optional suggested defaults."""
     values = defaults or {}
     return vol.Schema(
@@ -95,7 +97,7 @@ def _schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
-def _params(data: dict[str, Any]) -> ModbusTcpParams:
+def _params(data: Mapping[str, Any]) -> ModbusTcpParams:
     """Build the shared Home Assistant Modbus connection parameters."""
     return ModbusTcpParams(
         host=data[CONF_HOST],
@@ -104,7 +106,7 @@ def _params(data: dict[str, Any]) -> ModbusTcpParams:
     )
 
 
-def _family(data: dict[str, Any]) -> DeviceFamily:
+def _family(data: Mapping[str, Any]) -> DeviceFamily:
     """Return the selected product family."""
     return DeviceFamily(str(data[CONF_DEVICE_FAMILY]))
 
@@ -112,6 +114,23 @@ def _family(data: dict[str, Any]) -> DeviceFamily:
 def _entry_title(family: DeviceFamily, serial: str) -> str:
     """Build a useful config-entry title without assuming one product model."""
     return f"{DEVICE_FAMILY_NAMES[family.value]} {serial}"
+
+
+def _needs_relink(entry: ConfigEntry, data: Mapping[str, Any]) -> bool:
+    """Return whether probing new settings conflicts with the active link.
+
+    Home Assistant shares one Modbus connection per endpoint. A unit can be
+    probed on another unit ID without disturbing the current entry, and a new
+    host or port uses another connection. Only changing connection parameters
+    such as the framer on the same endpoint requires the old entry to release
+    its link first.
+    """
+    if entry.state not in (ConfigEntryState.LOADED, ConfigEntryState.SETUP_RETRY):
+        return False
+
+    current = _params(entry.data)
+    new = _params(data)
+    return new.endpoint == current.endpoint and new != current
 
 
 async def _async_validate(hass: HomeAssistant, data: dict[str, Any]) -> tuple[str, str]:
@@ -138,7 +157,7 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @override
-    def async_get_options_flow(config_entry: Any) -> OptionsFlow:
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowWithReload:
         """Return the options flow."""
         return ThesslaGreenOptionsFlow()
 
@@ -177,12 +196,13 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            entry_was_loaded = entry.state is ConfigEntryState.LOADED
-            if entry_was_loaded and not await self.hass.config_entries.async_unload(
-                entry.entry_id
-            ):
-                errors["base"] = "unknown"
-            else:
+            relinking = False
+            if _needs_relink(entry, user_input):
+                relinking = await self.hass.config_entries.async_unload(entry.entry_id)
+                if not relinking:
+                    errors["base"] = "unknown"
+
+            if not errors:
                 try:
                     serial, _firmware = await _async_validate(self.hass, user_input)
                 except CannotConnect:
@@ -194,6 +214,8 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors["base"] = "unknown"
                 else:
                     await self.async_set_unique_id(serial)
+                    if relinking and serial != entry.unique_id:
+                        await self.hass.config_entries.async_setup(entry.entry_id)
                     self._abort_if_unique_id_mismatch()
                     family = _family(user_input)
                     return self.async_update_reload_and_abort(
@@ -202,17 +224,17 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
                         title=_entry_title(family, serial),
                     )
 
-                if entry_was_loaded:
+                if relinking:
                     await self.hass.config_entries.async_setup(entry.entry_id)
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_schema(dict(entry.data)),
+            data_schema=_schema(entry.data),
             errors=errors,
         )
 
 
-class ThesslaGreenOptionsFlow(OptionsFlow):
+class ThesslaGreenOptionsFlow(OptionsFlowWithReload):
     """Configure optional capabilities without probing reserved registers."""
 
     @override
