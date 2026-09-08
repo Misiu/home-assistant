@@ -36,5 +36,7 @@ jobs:
         run: python -m script.translations develop --all
       - name: Tests
         run: python -m pytest -q tests/components/thessla_green
+      - name: Config flow coverage
+        run: python -m pytest -q tests/components/thessla_green/test_config_flow.py --cov=homeassistant.components.thessla_green.config_flow --cov-report=term-missing --cov-fail-under=100
       - name: Compile
         run: python -m compileall -q homeassistant/components/thessla_green tests/components/thessla_green
