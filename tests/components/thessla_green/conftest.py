@@ -103,7 +103,7 @@ def mock_config_entry() -> MockConfigEntry:
     """Return a configured Thessla Green entry."""
     return MockConfigEntry(
         domain=DOMAIN,
-        title=f"AirPack4 h {SERIAL}",
+        title=f"AirPack⁴ h {SERIAL}",
         unique_id=SERIAL,
         data={
             CONF_DEVICE_FAMILY: DEVICE_FAMILY,
