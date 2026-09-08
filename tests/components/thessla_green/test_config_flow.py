@@ -64,9 +64,7 @@ async def _start_user_flow(hass: HomeAssistant) -> dict:
     return result
 
 
-async def _start_reconfigure_flow(
-    hass: HomeAssistant, entry: MockConfigEntry
-) -> dict:
+async def _start_reconfigure_flow(hass: HomeAssistant, entry: MockConfigEntry) -> dict:
     """Start reconfiguration for an existing entry."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN,
@@ -178,9 +176,7 @@ async def test_user_flow_recovers_from_error(hass: HomeAssistant) -> None:
 
     with patch(
         "homeassistant.components.thessla_green.config_flow._async_validate",
-        AsyncMock(
-            side_effect=[CannotConnect(), (SERIAL, "4.85.0")]
-        ),
+        AsyncMock(side_effect=[CannotConnect(), (SERIAL, "4.85.0")]),
     ) as validate:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], USER_INPUT
@@ -202,9 +198,7 @@ async def test_user_flow_recovers_from_unknown_error(hass: HomeAssistant) -> Non
 
     with patch(
         "homeassistant.components.thessla_green.config_flow._async_validate",
-        AsyncMock(
-            side_effect=[RuntimeError("unexpected"), (SERIAL, "4.85.0")]
-        ),
+        AsyncMock(side_effect=[RuntimeError("unexpected"), (SERIAL, "4.85.0")]),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], USER_INPUT
