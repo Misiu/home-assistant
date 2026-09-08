@@ -12,6 +12,8 @@ from .entity import ThesslaGreenEntity
 
 @dataclass(frozen=True, kw_only=True)
 class ThesslaGreenSwitchDescription(SwitchEntityDescription):
+    """Describe a writable boolean value in the device library."""
+
     component: str
     attribute: str
     inverted: bool = False
@@ -39,6 +41,7 @@ async def async_setup_entry(
     entry: ThesslaGreenConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Set up Thessla Green switches."""
     coordinator = entry.runtime_data
     async_add_entities(
         ThesslaGreenSwitch(coordinator, description) for description in DESCRIPTIONS
@@ -46,6 +49,8 @@ async def async_setup_entry(
 
 
 class ThesslaGreenSwitch(ThesslaGreenEntity, SwitchEntity):
+    """Represent one writable AirPack4 boolean setting."""
+
     entity_description: ThesslaGreenSwitchDescription
 
     def __init__(
@@ -53,11 +58,13 @@ class ThesslaGreenSwitch(ThesslaGreenEntity, SwitchEntity):
         coordinator: ThesslaGreenCoordinator,
         description: ThesslaGreenSwitchDescription,
     ) -> None:
+        """Initialize the switch entity."""
         super().__init__(coordinator, description.key)
         self.entity_description = description
 
     @property
     def is_on(self) -> bool | None:
+        """Return the current switch state."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = getattr(component, self.entity_description.attribute)
         if not isinstance(value, bool):
@@ -65,11 +72,13 @@ class ThesslaGreenSwitch(ThesslaGreenEntity, SwitchEntity):
         return not value if self.entity_description.inverted else value
 
     async def async_turn_on(self, **kwargs: object) -> None:
+        """Turn the setting on."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = not self.entity_description.inverted
         await self._async_write(component, self.entity_description.attribute, value)
 
     async def async_turn_off(self, **kwargs: object) -> None:
+        """Turn the setting off."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = self.entity_description.inverted
         await self._async_write(component, self.entity_description.attribute, value)
