@@ -21,6 +21,8 @@ from .entity import ThesslaGreenEntity
 
 @dataclass(frozen=True, kw_only=True)
 class ThesslaGreenSelectDescription(SelectEntityDescription):
+    """Describe a writable enum value in the device library."""
+
     component: str
     attribute: str
     enum_type: type[IntEnum]
@@ -76,6 +78,7 @@ async def async_setup_entry(
     entry: ThesslaGreenConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    """Set up Thessla Green select entities."""
     coordinator = entry.runtime_data
     descriptions = list(BASE_DESCRIPTIONS)
     if coordinator.device.comfort is not None:
@@ -110,6 +113,8 @@ async def async_setup_entry(
 
 
 class ThesslaGreenSelect(ThesslaGreenEntity, SelectEntity):
+    """Represent one writable AirPack4 enum setting."""
+
     entity_description: ThesslaGreenSelectDescription
 
     def __init__(
@@ -117,11 +122,13 @@ class ThesslaGreenSelect(ThesslaGreenEntity, SelectEntity):
         coordinator: ThesslaGreenCoordinator,
         description: ThesslaGreenSelectDescription,
     ) -> None:
+        """Initialize the select entity."""
         super().__init__(coordinator, description.key)
         self.entity_description = description
 
     @property
     def current_option(self) -> str | None:
+        """Return the current selected option."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = getattr(component, self.entity_description.attribute)
         if value not in self.entity_description.values:
@@ -129,6 +136,7 @@ class ThesslaGreenSelect(ThesslaGreenEntity, SelectEntity):
         return value.name.lower()
 
     async def async_select_option(self, option: str) -> None:
+        """Write the selected option to the controller."""
         for value in self.entity_description.values:
             if value.name.lower() == option:
                 component = getattr(
