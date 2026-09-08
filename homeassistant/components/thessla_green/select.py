@@ -1,4 +1,4 @@
-"""Select platform for Thessla Green AirPack4."""
+"""Select platform for Thessla Green."""
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -113,7 +113,7 @@ async def async_setup_entry(
 
 
 class ThesslaGreenSelect(ThesslaGreenEntity, SelectEntity):
-    """Represent one writable AirPack4 enum setting."""
+    """Represent one writable Thessla Green enum setting."""
 
     entity_description: ThesslaGreenSelectDescription
 

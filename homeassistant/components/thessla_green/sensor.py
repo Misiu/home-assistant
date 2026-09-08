@@ -1,4 +1,4 @@
-"""Sensor platform for Thessla Green AirPack4."""
+"""Sensor platform for Thessla Green."""
 
 from dataclasses import dataclass
 
@@ -140,7 +140,7 @@ async def async_setup_entry(
 
 
 class ThesslaGreenSensor(ThesslaGreenEntity, SensorEntity):
-    """A single read-only AirPack4 value."""
+    """A single read-only Thessla Green value."""
 
     entity_description: ThesslaGreenSensorDescription
 

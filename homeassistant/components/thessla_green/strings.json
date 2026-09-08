@@ -1,22 +1,26 @@
 {
+  "title": "Thessla Green",
   "config": {
     "step": {
       "user": {
-        "title": "Connect to Thessla Green AirPack4",
-        "description": "Enter the settings of the Modbus TCP gateway connected to the AirPack4.",
+        "title": "Connect to Thessla Green",
+        "description": "Select the ventilation unit family and enter the settings of its Modbus TCP gateway.",
         "data": {
+          "device_family": "Device family",
           "host": "Host",
           "port": "Port",
           "framer": "Framing",
           "unit_id": "Unit ID"
         },
         "data_description": {
+          "device_family": "Select the closest known family. Use Other / unknown for models that are not listed.",
           "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter."
         }
       },
       "reconfigure": {
-        "title": "Reconfigure Thessla Green AirPack4",
+        "title": "Reconfigure Thessla Green",
         "data": {
+          "device_family": "Device family",
           "host": "Host",
           "port": "Port",
           "framer": "Framing",
@@ -25,25 +29,44 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to and identify the AirPack4.",
+      "cannot_connect": "Failed to connect to and identify the Thessla Green controller.",
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "This AirPack4 is already configured.",
-      "unique_id_mismatch": "The AirPack4 at the new address does not match the configured device."
+      "already_configured": "This Thessla Green controller is already configured.",
+      "unique_id_mismatch": "The controller at the new address does not match the configured device."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Optional AirPack4 capabilities",
+        "title": "Optional Thessla Green capabilities",
         "description": "Enable only capabilities supported by this controller. Unsupported register ranges are not probed automatically.",
         "data": {
           "constant_flow": "Constant Flow",
           "comfort": "Comfort temperature control",
           "erv": "ERV post-heater",
-          "legacy_filter_alarm": "Legacy community filter alarm (register 8444)"
+          "pressure_filter_alarm": "Pressure-switch filter alarm (register 8444)"
         }
+      }
+    }
+  },
+  "selector": {
+    "device_family": {
+      "options": {
+        "unknown": "Other / unknown",
+        "home_h": "AirPack Home h",
+        "home_v": "AirPack Home v",
+        "home_f": "AirPack Home f",
+        "series_4_h": "AirPack4 h",
+        "series_4_v": "AirPack4 v",
+        "airpack_f": "AirPack f"
+      }
+    },
+    "framer": {
+      "options": {
+        "rtu": "RTU over TCP (transparent gateway)",
+        "socket": "Modbus TCP"
       }
     }
   },
@@ -79,18 +102,39 @@
       "duct_filter_due": {"name": "Duct filter replacement"},
       "constant_flow_active": {"name": "Constant Flow active"},
       "erv_active": {"name": "ERV post-heater active"},
-      "legacy_filter_due": {"name": "Legacy filter replacement"}
+      "pressure_filter_due": {"name": "Pressure-switch filter alarm"}
     },
     "switch": {
       "enabled": {"name": "Ventilation"},
       "automatic_bypass": {"name": "Automatic bypass"}
     },
     "select": {
-      "operating_mode": {"name": "Operating mode"},
-      "season": {"name": "Season"},
-      "special_mode": {"name": "Special mode"},
-      "comfort_mode": {"name": "Comfort mode"},
-      "erv_mode": {"name": "ERV mode"}
+      "operating_mode": {
+        "name": "Operating mode",
+        "state": {"automatic": "Automatic", "manual": "Manual"}
+      },
+      "season": {
+        "name": "Season",
+        "state": {"summer": "Summer", "winter": "Winter"}
+      },
+      "special_mode": {
+        "name": "Special mode",
+        "state": {
+          "none": "None",
+          "fireplace": "Fireplace",
+          "airing": "Airing",
+          "open_windows": "Open windows",
+          "empty_house": "Empty house"
+        }
+      },
+      "comfort_mode": {
+        "name": "Comfort mode",
+        "state": {"eco": "Eco", "comfort": "Comfort"}
+      },
+      "erv_mode": {
+        "name": "ERV mode",
+        "state": {"off": "Off", "mode_1": "Mode 1", "mode_2": "Mode 2"}
+      }
     },
     "number": {
       "manual_speed": {"name": "Manual airflow"},

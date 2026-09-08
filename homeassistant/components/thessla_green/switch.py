@@ -1,4 +1,4 @@
-"""Switch platform for Thessla Green AirPack4."""
+"""Switch platform for Thessla Green."""
 
 from dataclasses import dataclass
 
@@ -49,7 +49,7 @@ async def async_setup_entry(
 
 
 class ThesslaGreenSwitch(ThesslaGreenEntity, SwitchEntity):
-    """Represent one writable AirPack4 boolean setting."""
+    """Represent one writable Thessla Green boolean setting."""
 
     entity_description: ThesslaGreenSwitchDescription
 

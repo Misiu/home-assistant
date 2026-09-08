@@ -1,4 +1,4 @@
-"""Diagnostics for Thessla Green AirPack4."""
+"""Diagnostics for Thessla Green."""
 
 from typing import Any
 
@@ -22,6 +22,7 @@ async def async_get_config_entry_diagnostics(
         "options": dict(entry.options),
         "device": {
             "domain": DOMAIN,
+            "family": device.family.value,
             "serial_number": device.info.serial_number,
             "firmware_version": device.info.firmware_version,
             "last_update_success": coordinator.last_update_success,

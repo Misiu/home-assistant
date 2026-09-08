@@ -6,6 +6,7 @@ from modbus_connection.mock import MockModbusConnection, MockModbusUnit
 
 from homeassistant import config_entries
 from homeassistant.components.thessla_green.const import (
+    CONF_DEVICE_FAMILY,
     CONF_FRAMER,
     CONF_UNIT_ID,
     DEFAULT_FRAMER,
@@ -15,7 +16,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from .conftest import HOST, PORT, SERIAL, UNIT_ID
+from .conftest import DEVICE_FAMILY, HOST, PORT, SERIAL, UNIT_ID
 
 
 async def test_user_flow(
@@ -23,7 +24,7 @@ async def test_user_flow(
     mock_modbus_connection: MockModbusConnection,
     mock_modbus_unit: MockModbusUnit,
 ) -> None:
-    """Configure an AirPack4 after reading its controller serial."""
+    """Configure a Thessla Green controller after reading its serial."""
     with patch(
         "homeassistant.components.modbus.connection.ModbusConnection",
         return_value=mock_modbus_connection,
@@ -36,6 +37,7 @@ async def test_user_flow(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {
+                CONF_DEVICE_FAMILY: DEVICE_FAMILY,
                 CONF_HOST: HOST,
                 CONF_PORT: PORT,
                 CONF_FRAMER: DEFAULT_FRAMER,
@@ -44,8 +46,9 @@ async def test_user_flow(
         )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == f"AirPack4 {SERIAL}"
+    assert result["title"] == f"AirPack4 h {SERIAL}"
     assert result["data"] == {
+        CONF_DEVICE_FAMILY: DEVICE_FAMILY,
         CONF_HOST: HOST,
         CONF_PORT: PORT,
         CONF_FRAMER: DEFAULT_FRAMER,
@@ -73,6 +76,7 @@ async def test_user_flow_cannot_identify_device(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {
+                CONF_DEVICE_FAMILY: DEVICE_FAMILY,
                 CONF_HOST: HOST,
                 CONF_PORT: PORT,
                 CONF_FRAMER: DEFAULT_FRAMER,

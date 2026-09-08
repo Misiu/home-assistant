@@ -1,9 +1,9 @@
-"""DataUpdateCoordinator for Thessla Green AirPack4."""
+"""DataUpdateCoordinator for Thessla Green."""
 
 import logging
 
 from modbus_connection import ModbusError
-from thessla_green_modbus import AirPack4
+from thessla_green_modbus import ThesslaGreenDevice
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -16,14 +16,14 @@ _LOGGER = logging.getLogger(__name__)
 type ThesslaGreenConfigEntry = ConfigEntry[ThesslaGreenCoordinator]
 
 
-class ThesslaGreenCoordinator(DataUpdateCoordinator[AirPack4]):
-    """Poll the complete AirPack4 model on one shared Modbus unit."""
+class ThesslaGreenCoordinator(DataUpdateCoordinator[ThesslaGreenDevice]):
+    """Poll one Thessla Green controller through one shared Modbus unit."""
 
     def __init__(
         self,
         hass: HomeAssistant,
         entry: ThesslaGreenConfigEntry,
-        device: AirPack4,
+        device: ThesslaGreenDevice,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -35,9 +35,10 @@ class ThesslaGreenCoordinator(DataUpdateCoordinator[AirPack4]):
         )
         self.device = device
 
-    async def _async_update_data(self) -> AirPack4:
+    async def _async_update_data(self) -> ThesslaGreenDevice:
+        """Poll all enabled components."""
         try:
             await self.device.async_update()
         except ModbusError as err:
-            raise UpdateFailed(f"Error communicating with AirPack4: {err}") from err
+            raise UpdateFailed(f"Error communicating with Thessla Green: {err}") from err
         return self.device

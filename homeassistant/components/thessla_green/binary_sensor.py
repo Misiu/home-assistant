@@ -1,4 +1,4 @@
-"""Binary sensor platform for Thessla Green AirPack4."""
+"""Binary sensor platform for Thessla Green."""
 
 from dataclasses import dataclass
 
@@ -96,12 +96,12 @@ async def async_setup_entry(
                 attribute="active",
             )
         )
-    if coordinator.device.legacy_filter_alarm is not None:
+    if coordinator.device.pressure_filter_alarm is not None:
         descriptions.append(
             ThesslaGreenBinarySensorDescription(
-                key="legacy_filter_due",
-                translation_key="legacy_filter_due",
-                component="legacy_filter_alarm",
+                key="pressure_filter_due",
+                translation_key="pressure_filter_due",
+                component="pressure_filter_alarm",
                 attribute="filter_due",
                 device_class=BinarySensorDeviceClass.PROBLEM,
                 entity_category=EntityCategory.DIAGNOSTIC,
@@ -115,7 +115,7 @@ async def async_setup_entry(
 
 
 class ThesslaGreenBinarySensor(ThesslaGreenEntity, BinarySensorEntity):
-    """Represent one AirPack4 binary state."""
+    """Represent one Thessla Green binary state."""
 
     entity_description: ThesslaGreenBinarySensorDescription
 

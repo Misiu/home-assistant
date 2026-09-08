@@ -6,6 +6,7 @@ from modbus_connection.mock import MockModbusConnection, MockModbusUnit
 import pytest
 
 from homeassistant.components.thessla_green.const import (
+    CONF_DEVICE_FAMILY,
     CONF_FRAMER,
     CONF_UNIT_ID,
     DEFAULT_FRAMER,
@@ -20,13 +21,14 @@ HOST = "1.2.3.4"
 PORT = 502
 UNIT_ID = 10
 SERIAL = "1a2b3c4d5e6f"
+DEVICE_FAMILY = "series_4_h"
 
 
 @pytest.fixture
 def mock_modbus_unit(
     mock_modbus_connection: MockModbusConnection,
 ) -> MockModbusUnit:
-    """Return a seeded AirPack4 unit using the real device library."""
+    """Return a seeded Thessla Green unit using the real device library."""
     unit = mock_modbus_connection.for_unit(UNIT_ID)
 
     input_registers = {
@@ -101,9 +103,10 @@ def mock_config_entry() -> MockConfigEntry:
     """Return a configured Thessla Green entry."""
     return MockConfigEntry(
         domain=DOMAIN,
-        title=f"AirPack4 {SERIAL}",
+        title=f"AirPack4 h {SERIAL}",
         unique_id=SERIAL,
         data={
+            CONF_DEVICE_FAMILY: DEVICE_FAMILY,
             CONF_HOST: HOST,
             CONF_PORT: PORT,
             CONF_FRAMER: DEFAULT_FRAMER,

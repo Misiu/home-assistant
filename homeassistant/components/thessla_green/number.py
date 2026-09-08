@@ -1,4 +1,4 @@
-"""Number platform for Thessla Green AirPack4."""
+"""Number platform for Thessla Green."""
 
 from dataclasses import dataclass
 
@@ -53,8 +53,8 @@ async def async_setup_entry(
                 translation_key="comfort_temperature",
                 component="comfort",
                 attribute="manual_temperature",
-                native_min_value=10,
-                native_max_value=45,
+                native_min_value=20,
+                native_max_value=90,
                 native_step=0.5,
                 native_unit_of_measurement=UnitOfTemperature.CELSIUS,
                 mode=NumberMode.BOX,
@@ -66,7 +66,7 @@ async def async_setup_entry(
 
 
 class ThesslaGreenNumber(ThesslaGreenEntity, NumberEntity):
-    """Represent one writable AirPack4 numeric setting."""
+    """Represent one writable Thessla Green numeric setting."""
 
     entity_description: ThesslaGreenNumberDescription
 

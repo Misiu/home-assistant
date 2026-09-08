@@ -3,7 +3,7 @@
 from typing import Literal, cast
 
 from modbus_connection import ModbusTcpParams
-from thessla_green_modbus import AirPack4, DeviceOptions
+from thessla_green_modbus import DeviceFamily, DeviceOptions, ThesslaGreenDevice
 
 from homeassistant.components.modbus import async_get_unit
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
@@ -12,10 +12,12 @@ from homeassistant.core import HomeAssistant
 from .const import (
     CONF_COMFORT,
     CONF_CONSTANT_FLOW,
+    CONF_DEVICE_FAMILY,
     CONF_ERV,
     CONF_FRAMER,
-    CONF_LEGACY_FILTER_ALARM,
+    CONF_PRESSURE_FILTER_ALARM,
     CONF_UNIT_ID,
+    DEFAULT_DEVICE_FAMILY,
 )
 from .coordinator import ThesslaGreenConfigEntry, ThesslaGreenCoordinator
 
@@ -40,14 +42,15 @@ async def async_setup_entry(
         framer=cast(Framer, entry.data[CONF_FRAMER]),
     )
     unit = async_get_unit(hass, entry, params, int(entry.data[CONF_UNIT_ID]))
-    device = AirPack4(
+    device = ThesslaGreenDevice(
         unit,
+        family=DeviceFamily(entry.data.get(CONF_DEVICE_FAMILY, DEFAULT_DEVICE_FAMILY)),
         options=DeviceOptions(
             constant_flow=bool(entry.options.get(CONF_CONSTANT_FLOW, False)),
             comfort=bool(entry.options.get(CONF_COMFORT, False)),
             erv=bool(entry.options.get(CONF_ERV, False)),
-            legacy_filter_alarm=bool(
-                entry.options.get(CONF_LEGACY_FILTER_ALARM, False)
+            pressure_filter_alarm=bool(
+                entry.options.get(CONF_PRESSURE_FILTER_ALARM, False)
             ),
         ),
     )

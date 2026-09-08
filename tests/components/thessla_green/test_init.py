@@ -1,6 +1,7 @@
 """Tests for Thessla Green setup and entity mapping."""
 
 from modbus_connection.mock import MockModbusUnit
+from thessla_green_modbus import DeviceFamily
 
 from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN, SERVICE_SET_VALUE
 from homeassistant.components.select import (
@@ -32,6 +33,7 @@ async def test_setup_creates_device_and_entities(
     """Set up the controller through the real device library."""
     coordinator = setup_integration.runtime_data
     assert coordinator.last_update_success
+    assert coordinator.device.family is DeviceFamily.SERIES_4_H
     assert coordinator.device.info.serial_number == SERIAL
     assert coordinator.device.info.firmware_version == "4.85.0"
 

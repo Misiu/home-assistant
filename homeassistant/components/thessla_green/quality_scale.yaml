@@ -65,7 +65,7 @@ rules:
   docs-use-cases: todo
   dynamic-devices:
     status: exempt
-    comment: One config entry represents one fixed AirPack4 controller.
+    comment: One config entry represents one fixed Thessla Green controller.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default: done
@@ -78,7 +78,7 @@ rules:
     comment: This integration does not raise repair issues.
   stale-devices:
     status: exempt
-    comment: One config entry represents one fixed AirPack4 controller.
+    comment: One config entry represents one fixed Thessla Green controller.
 
   # Platinum
   async-dependency: done
