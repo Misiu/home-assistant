@@ -23,7 +23,9 @@ class ThesslaGreenEntity(CoordinatorEntity[ThesslaGreenCoordinator]):
     def __init__(self, coordinator: ThesslaGreenCoordinator, key: str) -> None:
         super().__init__(coordinator)
         entry = coordinator.config_entry
-        serial = coordinator.device.info.serial_number or entry.unique_id or entry.entry_id
+        serial = (
+            coordinator.device.info.serial_number or entry.unique_id or entry.entry_id
+        )
         self._attr_unique_id = f"{serial}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, str(serial))},
