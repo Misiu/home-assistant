@@ -66,6 +66,11 @@
       }
     }
   },
+  "exceptions": {
+    "wrong_device": {
+      "message": "A different Thessla Green controller is answering than the one this entry was configured for."
+    }
+  },
   "selector": {
     "device_family": {
       "options": {
