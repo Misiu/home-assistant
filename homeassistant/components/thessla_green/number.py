@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from homeassistant.components.number import (
+    NumberDeviceClass,
     NumberEntity,
     NumberEntityDescription,
     NumberMode,
@@ -53,8 +54,9 @@ async def async_setup_entry(
                 translation_key="comfort_temperature",
                 component="comfort",
                 attribute="manual_temperature",
-                native_min_value=20,
-                native_max_value=90,
+                device_class=NumberDeviceClass.TEMPERATURE,
+                native_min_value=10,
+                native_max_value=45,
                 native_step=0.5,
                 native_unit_of_measurement=UnitOfTemperature.CELSIUS,
                 mode=NumberMode.BOX,
