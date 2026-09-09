@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import override
 
 from thessla_green_modbus import (
     ComfortMode,
@@ -127,6 +128,7 @@ class ThesslaGreenSelect(ThesslaGreenEntity, SelectEntity):
         self.entity_description = description
 
     @property
+    @override
     def current_option(self) -> str | None:
         """Return the current selected option."""
         component = getattr(self.coordinator.device, self.entity_description.component)
@@ -135,6 +137,7 @@ class ThesslaGreenSelect(ThesslaGreenEntity, SelectEntity):
             return None
         return value.name.lower()
 
+    @override
     async def async_select_option(self, option: str) -> None:
         """Write the selected option to the controller."""
         for value in self.entity_description.values:
