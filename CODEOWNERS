@@ -1889,6 +1889,8 @@ CLAUDE.md @home-assistant/core
 /tests/components/thermobeacon/ @bdraco
 /homeassistant/components/thermopro/ @bdraco @h3ss
 /tests/components/thermopro/ @bdraco @h3ss
+/homeassistant/components/thessla_green/ @Misiu
+/tests/components/thessla_green/ @Misiu
 /homeassistant/components/thethingsnetwork/ @angelnu
 /tests/components/thethingsnetwork/ @angelnu
 /homeassistant/components/thread/ @home-assistant/core

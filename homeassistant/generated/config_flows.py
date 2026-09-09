@@ -800,6 +800,7 @@ FLOWS = {
         "tessie",
         "thermobeacon",
         "thermopro",
+        "thessla_green",
         "thethingsnetwork",
         "thread",
         "tibber",
