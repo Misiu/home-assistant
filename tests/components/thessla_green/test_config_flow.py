@@ -332,6 +332,7 @@ async def test_reconfigure_new_endpoint_does_not_unload_active_link(
 
     with (
         patch.object(hass.config_entries, "async_unload", AsyncMock()) as unload,
+        patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload,
         patch(
             "homeassistant.components.thessla_green.config_flow._async_validate",
             AsyncMock(return_value=(SERIAL, "4.85.0")),
@@ -344,6 +345,7 @@ async def test_reconfigure_new_endpoint_does_not_unload_active_link(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     unload.assert_not_awaited()
+    schedule_reload.assert_called_once_with(setup_integration.entry_id)
 
 
 async def test_reconfigure_flow_wrong_device(
