@@ -1,6 +1,7 @@
 """Binary sensor platform for Thessla Green."""
 
 from dataclasses import dataclass
+from typing import override
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -129,6 +130,7 @@ class ThesslaGreenBinarySensor(ThesslaGreenEntity, BinarySensorEntity):
         self.entity_description = description
 
     @property
+    @override
     def is_on(self) -> bool | None:
         """Return the current binary state."""
         component = getattr(self.coordinator.device, self.entity_description.component)
