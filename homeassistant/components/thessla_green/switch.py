@@ -1,6 +1,7 @@
 """Switch platform for Thessla Green."""
 
 from dataclasses import dataclass
+from typing import override
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.core import HomeAssistant
@@ -63,6 +64,7 @@ class ThesslaGreenSwitch(ThesslaGreenEntity, SwitchEntity):
         self.entity_description = description
 
     @property
+    @override
     def is_on(self) -> bool | None:
         """Return the current switch state."""
         component = getattr(self.coordinator.device, self.entity_description.component)
@@ -71,12 +73,14 @@ class ThesslaGreenSwitch(ThesslaGreenEntity, SwitchEntity):
             return None
         return not value if self.entity_description.inverted else value
 
+    @override
     async def async_turn_on(self, **kwargs: object) -> None:
         """Turn the setting on."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = not self.entity_description.inverted
         await self._async_write(component, self.entity_description.attribute, value)
 
+    @override
     async def async_turn_off(self, **kwargs: object) -> None:
         """Turn the setting off."""
         component = getattr(self.coordinator.device, self.entity_description.component)
