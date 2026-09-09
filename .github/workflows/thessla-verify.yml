@@ -9,16 +9,14 @@ on:
       - .github/workflows/thessla-verify.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
@@ -26,12 +24,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements_test.txt -e . 'infrared-protocols==10.0.0' 'rf-protocols==4.3.0' 'paho-mqtt==2.1.0' 'aiohasupervisor==0.6.0' 'modbus-connection[tmodbus]==4.11.1' 'pymodbus==3.13.1' 'tmodbus==0.6.2' 'thessla-green-modbus==0.1.0a4'
-      - name: Hassfest
+      - name: Generate Home Assistant dependency files
+        run: python -m script.gen_requirements_all
+      - name: Commit generated dependency files
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Generated dependency files are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements.txt requirements_all.txt requirements_test_pre_commit.txt homeassistant/package_constraints.txt
+          git commit -m "Generate Home Assistant requirements"
+          git push
+      - name: Hassfest integration
         run: python -m script.hassfest --integration-path homeassistant/components/thessla_green --requirements
+      - name: Hassfest full repository
+        run: python -m script.hassfest
       - name: Ruff
         run: |
           python -m ruff format --check homeassistant/components/thessla_green tests/components/thessla_green
           python -m ruff check homeassistant/components/thessla_green tests/components/thessla_green
+      - name: Mypy
+        run: python -m mypy homeassistant/components/thessla_green
       - name: Compile English translations
         run: python -m script.translations develop --all
       - name: Tests
