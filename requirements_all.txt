@@ -3253,6 +3253,9 @@ thermobeacon-ble==0.10.0
 # homeassistant.components.thermopro
 thermopro-ble==1.1.4
 
+# homeassistant.components.thessla_green
+thessla-green-modbus==0.1.0a4
+
 # homeassistant.components.thingspeak
 thingspeak==1.0.0
 
