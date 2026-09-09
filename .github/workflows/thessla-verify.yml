@@ -14,7 +14,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -38,6 +38,8 @@ jobs:
           git add requirements.txt requirements_all.txt requirements_test_pre_commit.txt homeassistant/package_constraints.txt
           git commit -m "Generate Home Assistant requirements"
           git push
+      - name: Install full Home Assistant requirements
+        run: uv pip install --system -r requirements_all.txt
       - name: Hassfest integration
         run: python -m script.hassfest --integration-path homeassistant/components/thessla_green --requirements
       - name: Hassfest full repository
