@@ -18,8 +18,8 @@ async def async_get_config_entry_diagnostics(
     """Return diagnostics without exposing network or controller identifiers."""
     coordinator = entry.runtime_data
     device = coordinator.device
-    registers = await device.async_read_raw(notify=False)
-    input_registers = dict(registers.get("input", {}))
+    registers: dict[str, Any] = await device.async_read_raw(notify=False)
+    input_registers: dict[int, Any] = dict(registers.get("input", {}))
     for address in _SERIAL_REGISTER_ADDRESSES:
         if address in input_registers:
             input_registers[address] = REDACTED
