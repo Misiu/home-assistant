@@ -452,9 +452,7 @@ async def test_reconfigure_relink_wrong_device_restores_entry(
     result = await _start_reconfigure_flow(hass, setup_integration)
 
     with (
-        patch.object(
-            hass.config_entries, "async_unload", AsyncMock(return_value=True)
-        ),
+        patch.object(hass.config_entries, "async_unload", AsyncMock(return_value=True)),
         patch.object(
             hass.config_entries, "async_setup", AsyncMock(return_value=True)
         ) as setup,
