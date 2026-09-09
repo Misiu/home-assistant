@@ -1,6 +1,7 @@
 """DataUpdateCoordinator for Thessla Green."""
 
 import logging
+from typing import override
 
 from modbus_connection import ModbusError
 from thessla_green_modbus import ThesslaGreenDevice
@@ -20,6 +21,8 @@ type ThesslaGreenConfigEntry = ConfigEntry[ThesslaGreenCoordinator]
 class ThesslaGreenCoordinator(DataUpdateCoordinator[ThesslaGreenDevice]):
     """Poll one Thessla Green controller through one shared Modbus unit."""
 
+    config_entry: ThesslaGreenConfigEntry
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -36,6 +39,7 @@ class ThesslaGreenCoordinator(DataUpdateCoordinator[ThesslaGreenDevice]):
         )
         self.device = device
 
+    @override
     async def _async_update_data(self) -> ThesslaGreenDevice:
         """Poll all enabled components and verify the configured controller."""
         try:
