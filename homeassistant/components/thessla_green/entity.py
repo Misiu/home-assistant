@@ -3,7 +3,7 @@
 from typing import Any
 
 from modbus_connection import ModbusError
-from thessla_green_modbus.components import ThesslaGreenComponent
+from thessla_green_modbus import ThesslaGreenComponent
 
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
