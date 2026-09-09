@@ -1,68 +1,198 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect to Thessla Green",
-        "description": "Select the ventilation unit family and enter the settings of its Modbus TCP gateway.",
-        "data": {
-          "device_family": "Device family",
-          "host": "Host",
-          "port": "Port",
-          "framer": "Framing",
-          "unit_id": "Unit ID"
-        },
-        "data_description": {
-          "device_family": "Select the closest known family. Use Other / unknown for models that are not listed.",
-          "host": "IP address or hostname of the Modbus TCP gateway.",
-          "port": "TCP port used by the Modbus gateway.",
-          "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter.",
-          "unit_id": "Modbus unit address of the Thessla Green controller. The factory default is 10."
-        }
-      },
-      "reconfigure": {
-        "title": "Reconfigure Thessla Green",
-        "data": {
-          "device_family": "Device family",
-          "host": "Host",
-          "port": "Port",
-          "framer": "Framing",
-          "unit_id": "Unit ID"
-        },
-        "data_description": {
-          "device_family": "Select the closest known family. Use Other / unknown for models that are not listed.",
-          "host": "IP address or hostname of the Modbus TCP gateway.",
-          "port": "TCP port used by the Modbus gateway.",
-          "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter.",
-          "unit_id": "Modbus unit address of the Thessla Green controller. The factory default is 10."
-        }
-      }
+    "abort": {
+      "already_configured": "This Thessla Green controller is already configured.",
+      "unique_id_mismatch": "The controller at the new address does not match the configured device."
     },
     "error": {
       "cannot_connect": "Failed to connect to and identify the Thessla Green controller.",
       "unknown": "Unexpected error"
     },
-    "abort": {
-      "already_configured": "This Thessla Green controller is already configured.",
-      "unique_id_mismatch": "The controller at the new address does not match the configured device."
-    }
-  },
-  "options": {
     "step": {
-      "init": {
-        "title": "Optional Thessla Green capabilities",
-        "description": "Enable only capabilities supported by this controller. Unsupported register ranges are not probed automatically.",
+      "reconfigure": {
         "data": {
-          "constant_flow": "Constant Flow",
-          "comfort": "Comfort temperature control",
-          "erv": "ERV post-heater",
-          "pressure_filter_alarm": "Pressure-switch filter alarm (register 8444)"
+          "device_family": "Device family",
+          "framer": "Framing",
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit ID"
         },
         "data_description": {
-          "constant_flow": "Enable registers for units equipped with Constant Flow airflow control.",
-          "comfort": "Enable Comfort temperature-control registers when supported by the controller.",
-          "erv": "Enable ERV post-heater registers when this hardware is present.",
-          "pressure_filter_alarm": "Enable the pressure-switch filter alarm at register 8444 only on controllers that support it."
+          "device_family": "Select the closest known family. Use Other / unknown for models that are not listed.",
+          "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter.",
+          "host": "IP address or hostname of the Modbus TCP gateway.",
+          "port": "TCP port used by the Modbus gateway.",
+          "unit_id": "Modbus unit address of the Thessla Green controller. The factory default is 10."
+        },
+        "title": "Reconfigure Thessla Green"
+      },
+      "user": {
+        "data": {
+          "device_family": "Device family",
+          "framer": "Framing",
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Unit ID"
+        },
+        "data_description": {
+          "device_family": "Select the closest known family. Use Other / unknown for models that are not listed.",
+          "framer": "Use RTU for a transparent serial gateway and socket for a Modbus TCP protocol converter.",
+          "host": "IP address or hostname of the Modbus TCP gateway.",
+          "port": "TCP port used by the Modbus gateway.",
+          "unit_id": "Modbus unit address of the Thessla Green controller. The factory default is 10."
+        },
+        "description": "Select the ventilation unit family and enter the settings of its Modbus TCP gateway.",
+        "title": "Connect to Thessla Green"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "bypass_actuator": {
+        "name": "Bypass actuator"
+      },
+      "constant_flow_active": {
+        "name": "Constant Flow active"
+      },
+      "duct_filter_due": {
+        "name": "Duct filter replacement"
+      },
+      "error": {
+        "name": "Error"
+      },
+      "erv_active": {
+        "name": "ERV post-heater active"
+      },
+      "extract_fan_failure": {
+        "name": "Extract fan failure"
+      },
+      "extract_filter_due": {
+        "name": "Extract filter replacement"
+      },
+      "extract_filter_missing": {
+        "name": "Extract filter missing"
+      },
+      "extract_flow_sensor_failure": {
+        "name": "Extract flow sensor failure"
+      },
+      "fans_powered": {
+        "name": "Fan power"
+      },
+      "fpx_thermal_protection": {
+        "name": "FPX thermal protection"
+      },
+      "frost_protection": {
+        "name": "Frost protection"
+      },
+      "pressure_filter_due": {
+        "name": "Pressure-switch filter alarm"
+      },
+      "supply_fan_failure": {
+        "name": "Supply fan failure"
+      },
+      "supply_filter_due": {
+        "name": "Supply filter replacement"
+      },
+      "supply_filter_missing": {
+        "name": "Supply filter missing"
+      },
+      "supply_flow_sensor_failure": {
+        "name": "Supply flow sensor failure"
+      },
+      "warning": {
+        "name": "Warning"
+      }
+    },
+    "number": {
+      "comfort_temperature": {
+        "name": "Comfort temperature"
+      },
+      "manual_speed": {
+        "name": "Manual airflow"
+      }
+    },
+    "select": {
+      "comfort_mode": {
+        "name": "Comfort mode",
+        "state": {
+          "comfort": "Comfort",
+          "eco": "Eco"
         }
+      },
+      "erv_mode": {
+        "name": "ERV mode",
+        "state": {
+          "mode_1": "Mode 1",
+          "mode_2": "Mode 2",
+          "off": "Off"
+        }
+      },
+      "operating_mode": {
+        "name": "Operating mode",
+        "state": {
+          "automatic": "Automatic",
+          "manual": "Manual"
+        }
+      },
+      "season": {
+        "name": "Season",
+        "state": {
+          "summer": "Summer",
+          "winter": "Winter"
+        }
+      },
+      "special_mode": {
+        "name": "Special mode",
+        "state": {
+          "airing": "Airing",
+          "empty_house": "Empty house",
+          "fireplace": "Fireplace",
+          "none": "None",
+          "open_windows": "Open windows"
+        }
+      }
+    },
+    "sensor": {
+      "after_fpx_temperature": {
+        "name": "FPX temperature"
+      },
+      "ambient_temperature": {
+        "name": "Ambient temperature"
+      },
+      "constant_flow_extract_percentage": {
+        "name": "Constant Flow extract percentage"
+      },
+      "constant_flow_extract_target": {
+        "name": "Constant Flow extract target"
+      },
+      "constant_flow_supply_percentage": {
+        "name": "Constant Flow supply percentage"
+      },
+      "constant_flow_supply_target": {
+        "name": "Constant Flow supply target"
+      },
+      "extract_flow": {
+        "name": "Extract airflow"
+      },
+      "extract_temperature": {
+        "name": "Extract temperature"
+      },
+      "outside_temperature": {
+        "name": "Outdoor temperature"
+      },
+      "supply_flow": {
+        "name": "Supply airflow"
+      },
+      "supply_temperature": {
+        "name": "Supply temperature"
+      }
+    },
+    "switch": {
+      "automatic_bypass": {
+        "name": "Automatic bypass"
+      },
+      "enabled": {
+        "name": "Ventilation"
       }
     }
   },
@@ -71,16 +201,36 @@
       "message": "A different Thessla Green controller is answering than the one this entry was configured for."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "comfort": "Comfort temperature control",
+          "constant_flow": "Constant Flow",
+          "erv": "ERV post-heater",
+          "pressure_filter_alarm": "Pressure-switch filter alarm (register 8444)"
+        },
+        "data_description": {
+          "comfort": "Enable Comfort temperature-control registers when supported by the controller.",
+          "constant_flow": "Enable registers for units equipped with Constant Flow airflow control.",
+          "erv": "Enable ERV post-heater registers when this hardware is present.",
+          "pressure_filter_alarm": "Enable the pressure-switch filter alarm at register 8444 only on controllers that support it."
+        },
+        "description": "Enable only capabilities supported by this controller. Unsupported register ranges are not probed automatically.",
+        "title": "Optional Thessla Green capabilities"
+      }
+    }
+  },
   "selector": {
     "device_family": {
       "options": {
-        "unknown": "Other / unknown",
+        "airpack_f": "AirPack f",
+        "home_f": "AirPack Home f",
         "home_h": "AirPack Home h",
         "home_v": "AirPack Home v",
-        "home_f": "AirPack Home f",
         "series_4_h": "AirPack⁴ h",
         "series_4_v": "AirPack⁴ v",
-        "airpack_f": "AirPack f"
+        "unknown": "Other / unknown"
       }
     },
     "framer": {
@@ -88,77 +238,6 @@
         "rtu": "RTU over TCP (transparent gateway)",
         "socket": "Modbus TCP"
       }
-    }
-  },
-  "entity": {
-    "sensor": {
-      "outside_temperature": {"name": "Outdoor temperature"},
-      "supply_temperature": {"name": "Supply temperature"},
-      "extract_temperature": {"name": "Extract temperature"},
-      "after_fpx_temperature": {"name": "FPX temperature"},
-      "ambient_temperature": {"name": "Ambient temperature"},
-      "supply_flow": {"name": "Supply airflow"},
-      "extract_flow": {"name": "Extract airflow"},
-      "constant_flow_supply_percentage": {"name": "Constant Flow supply percentage"},
-      "constant_flow_extract_percentage": {"name": "Constant Flow extract percentage"},
-      "constant_flow_supply_target": {"name": "Constant Flow supply target"},
-      "constant_flow_extract_target": {"name": "Constant Flow extract target"}
-    },
-    "binary_sensor": {
-      "fans_powered": {"name": "Fan power"},
-      "bypass_actuator": {"name": "Bypass actuator"},
-      "frost_protection": {"name": "Frost protection"},
-      "warning": {"name": "Warning"},
-      "error": {"name": "Error"},
-      "fpx_thermal_protection": {"name": "FPX thermal protection"},
-      "supply_fan_failure": {"name": "Supply fan failure"},
-      "extract_fan_failure": {"name": "Extract fan failure"},
-      "supply_flow_sensor_failure": {"name": "Supply flow sensor failure"},
-      "extract_flow_sensor_failure": {"name": "Extract flow sensor failure"},
-      "supply_filter_missing": {"name": "Supply filter missing"},
-      "extract_filter_missing": {"name": "Extract filter missing"},
-      "supply_filter_due": {"name": "Supply filter replacement"},
-      "extract_filter_due": {"name": "Extract filter replacement"},
-      "duct_filter_due": {"name": "Duct filter replacement"},
-      "constant_flow_active": {"name": "Constant Flow active"},
-      "erv_active": {"name": "ERV post-heater active"},
-      "pressure_filter_due": {"name": "Pressure-switch filter alarm"}
-    },
-    "switch": {
-      "enabled": {"name": "Ventilation"},
-      "automatic_bypass": {"name": "Automatic bypass"}
-    },
-    "select": {
-      "operating_mode": {
-        "name": "Operating mode",
-        "state": {"automatic": "Automatic", "manual": "Manual"}
-      },
-      "season": {
-        "name": "Season",
-        "state": {"summer": "Summer", "winter": "Winter"}
-      },
-      "special_mode": {
-        "name": "Special mode",
-        "state": {
-          "none": "None",
-          "fireplace": "Fireplace",
-          "airing": "Airing",
-          "open_windows": "Open windows",
-          "empty_house": "Empty house"
-        }
-      },
-      "comfort_mode": {
-        "name": "Comfort mode",
-        "state": {"eco": "Eco", "comfort": "Comfort"}
-      },
-      "erv_mode": {
-        "name": "ERV mode",
-        "state": {"off": "Off", "mode_1": "Mode 1", "mode_2": "Mode 2"}
-      }
-    },
-    "number": {
-      "manual_speed": {"name": "Manual airflow"},
-      "comfort_temperature": {"name": "Comfort temperature"}
     }
   }
 }
