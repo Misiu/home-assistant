@@ -1,24 +1,33 @@
-name: Generate Thessla Green metadata
+name: Verify Thessla Green
 
 "on":
   push:
     branches:
       - thessla-green
     paths:
+      - homeassistant/components/thessla_green/**
+      - tests/components/thessla_green/**
+      - homeassistant/generated/config_flows.py
+      - homeassistant/generated/integrations.json
+      - requirements.txt
+      - requirements_all.txt
+      - requirements_test_pre_commit.txt
+      - homeassistant/package_constraints.txt
+      - CODEOWNERS
       - .github/workflows/thessla-verify.yml
 
 concurrency:
-  group: thessla-generate-${{ github.ref }}
+  group: thessla-verify-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write # Temporary: required to commit generated Home Assistant metadata.
+  contents: read # Required to check out and validate repository contents.
 
 jobs:
-  generate:
-    name: Generate metadata
+  verify:
+    name: Verify integration
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -32,26 +41,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements_test.txt -e . 'infrared-protocols==10.0.0' 'rf-protocols==4.3.0' 'paho-mqtt==2.1.0' 'aiohasupervisor==0.6.0' 'modbus-connection[tmodbus]==4.11.1' 'pymodbus==3.13.1' 'tmodbus==0.6.2' 'thessla-green-modbus==0.1.0a4'
-      - name: Generate Home Assistant metadata
+      - name: Validate Home Assistant dependency files
+        run: python -m script.gen_requirements_all validate
+      - name: Install full Home Assistant requirements
+        run: uv pip install --system -r requirements_all.txt
+      - name: Hassfest integration
+        run: python -m script.hassfest --integration-path homeassistant/components/thessla_green --requirements
+      - name: Hassfest full repository
+        run: python -m script.hassfest
+      - name: Ruff
         run: |
-          python -m script.hassfest --action generate -p codeowners,integration_info,config_flow
-          python -m script.gen_requirements_all
-      - name: Commit generated files
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git add CODEOWNERS \
-            homeassistant/generated/config_flows.py \
-            homeassistant/generated/integrations.json \
-            requirements.txt \
-            requirements_all.txt \
-            requirements_test_pre_commit.txt \
-            homeassistant/package_constraints.txt
-          if git diff --cached --quiet; then
-            echo "Generated files are already current."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Generate Thessla Green metadata"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
+          python -m ruff format --check homeassistant/components/thessla_green tests/components/thessla_green
+          python -m ruff check homeassistant/components/thessla_green tests/components/thessla_green
+      - name: Mypy
+        run: python -m mypy homeassistant/components/thessla_green
+      - name: Compile English translations
+        run: python -m script.translations develop --all
+      - name: Tests
+        run: python -m pytest -q tests/components/thessla_green
+      - name: Config flow coverage
+        run: python -m pytest -q tests/components/thessla_green/test_config_flow.py --cov=homeassistant.components.thessla_green.config_flow --cov-report=term-missing --cov-fail-under=100
+      - name: Compile
+        run: python -m compileall -q homeassistant/components/thessla_green tests/components/thessla_green
