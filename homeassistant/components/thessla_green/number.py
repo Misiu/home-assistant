@@ -1,6 +1,7 @@
 """Number platform for Thessla Green."""
 
 from dataclasses import dataclass
+from typing import override
 
 from homeassistant.components.number import (
     NumberDeviceClass,
@@ -82,12 +83,14 @@ class ThesslaGreenNumber(ThesslaGreenEntity, NumberEntity):
         self.entity_description = description
 
     @property
+    @override
     def native_value(self) -> float | None:
         """Return the current numeric value."""
         component = getattr(self.coordinator.device, self.entity_description.component)
         value = getattr(component, self.entity_description.attribute)
         return float(value) if isinstance(value, int | float) else None
 
+    @override
     async def async_set_native_value(self, value: float) -> None:
         """Write a validated numeric value to the controller."""
         component = getattr(self.coordinator.device, self.entity_description.component)
