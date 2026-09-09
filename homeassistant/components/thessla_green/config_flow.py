@@ -188,7 +188,6 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=_schema(), errors=errors
         )
 
-    @override
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -237,7 +236,6 @@ class ThesslaGreenConfigFlow(ConfigFlow, domain=DOMAIN):
 class ThesslaGreenOptionsFlow(OptionsFlowWithReload):
     """Configure optional capabilities without probing reserved registers."""
 
-    @override
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
