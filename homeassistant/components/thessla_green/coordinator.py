@@ -7,6 +7,7 @@ from thessla_green_modbus import ThesslaGreenDevice
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, SCAN_INTERVAL
@@ -36,11 +37,18 @@ class ThesslaGreenCoordinator(DataUpdateCoordinator[ThesslaGreenDevice]):
         self.device = device
 
     async def _async_update_data(self) -> ThesslaGreenDevice:
-        """Poll all enabled components."""
+        """Poll all enabled components and verify the configured controller."""
         try:
             await self.device.async_update()
         except ModbusError as err:
             raise UpdateFailed(
                 f"Error communicating with Thessla Green: {err}"
             ) from err
+
+        if self.device.info.serial_number != self.config_entry.unique_id:
+            raise ConfigEntryError(
+                translation_domain=DOMAIN,
+                translation_key="wrong_device",
+            )
+
         return self.device
